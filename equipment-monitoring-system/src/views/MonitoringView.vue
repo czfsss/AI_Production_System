@@ -1,9 +1,34 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
+import { useAuthStore } from '../stores/auth'
+
+const authStore = useAuthStore()
+
+// 登录提示弹窗控制
+const showLoginPrompt = ref(false)
+
+// 登录验证函数
+const requireAuth = (callback: () => void) => {
+  if (!authStore.isLoggedIn) {
+    showLoginPrompt.value = true
+    return
+  }
+  callback()
+}
+
+// 打开登录弹窗的函数
+const openLoginDialog = () => {
+  showLoginPrompt.value = false
+  // 触发LoginButton组件的登录弹窗
+  const loginButton = document.querySelector('.btn') as HTMLElement
+  if (loginButton) {
+    loginButton.click()
+  }
+}
 
 const md: any = new MarkdownIt({
   highlight: function (str: string, lang: string) {
@@ -32,7 +57,6 @@ const deviceTypes = [
   { label: '封箱机', value: 'cartoning_machine' }
 ]
 const deviceNumbers = Array.from({ length: 22 }, (_, i) => ({ label: `${i + 1}#`, value: i + 1 }))
-// 更新班次选项为甲班、乙班、丙班
 const shifts = [
   { label: '甲班', value: 'jia' },
   { label: '乙班', value: 'yi' },
@@ -79,47 +103,50 @@ const showAnalysisResult = ref(false)
 // --- Functions ---
 
 const bindDevice = () => {
-  if (!deviceType.value || !deviceNumber.value || !shift.value) {
-    ElMessage.warning('请填写完整的设备信息')
-    return
-  }
-  const typeLabel = deviceTypes.find(t => t.value === deviceType.value)?.label || ''
-  boundDeviceInfo.value = {
-    type: typeLabel,
-    number: deviceNumber.value,
-    shift: shift.value,
-    id: `DEV-${deviceType.value}-${deviceNumber.value}`
-  }
-  // Simulate fetching initial device status and params
-  deviceStatus.value = 'running'
-  currentDeviceParams.value = {
-    temperature: (Math.random() * 30 + 50).toFixed(1),
-    pressure: (Math.random() * 2 + 1).toFixed(1),
-    speed: Math.floor(Math.random() * 500 + 1000),
-    runtime: '0h 5m'
-  }
-  isDeviceBound.value = true
-  ElMessage.success('设备绑定成功')
+  requireAuth(() => {
+    if (!deviceType.value || !deviceNumber.value || !shift.value) {
+      ElMessage.warning('请填写完整的设备信息')
+      return
+    }
+    const typeLabel = deviceTypes.find(t => t.value === deviceType.value)?.label || ''
+    boundDeviceInfo.value = {
+      type: typeLabel,
+      number: deviceNumber.value,
+      shift: shift.value,
+      id: `DEV-${deviceType.value}-${deviceNumber.value}`
+    }
+    // Simulate fetching initial device status and params
+    deviceStatus.value = 'running'
+    currentDeviceParams.value = {
+      temperature: (Math.random() * 30 + 50).toFixed(1),
+      pressure: (Math.random() * 2 + 1).toFixed(1),
+      speed: Math.floor(Math.random() * 500 + 1000),
+      runtime: '0h 5m'
+    }
+    isDeviceBound.value = true
+    ElMessage.success('设备绑定成功')
+  })
 }
 
-// 添加解绑设备确认弹窗
 const unbindDevice = () => {
-  ElMessageBox.confirm('确定要解绑当前设备吗？解绑后将停止实时监控。', '解绑确认', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning',
-    customClass: 'unbind-confirm'
-  })
-  .then(() => {
-    isDeviceBound.value = false
-    boundDeviceInfo.value = null
-    currentDeviceParams.value = null
-    deviceStatus.value = 'stopped'
-    faultAnalysis.value = ''
-    ElMessage.info('设备已解绑')
-  })
-  .catch(() => {
-    ElMessage.info('已取消解绑')
+  requireAuth(() => {
+    ElMessageBox.confirm('确定要解绑当前设备吗？解绑后将停止实时监控。', '解绑确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+      customClass: 'unbind-confirm'
+    })
+    .then(() => {
+      isDeviceBound.value = false
+      boundDeviceInfo.value = null
+      currentDeviceParams.value = null
+      deviceStatus.value = 'stopped'
+      faultAnalysis.value = ''
+      ElMessage.info('设备已解绑')
+    })
+    .catch(() => {
+      ElMessage.info('已取消解绑')
+    })
   })
 }
 
@@ -149,34 +176,36 @@ const getAlarmLevelClass = (level: string) => {
   return `alarm-level-${level}`
 }
 
-// Simulate device status change
 const simulateDeviceFault = () => {
-  if (deviceStatus.value === 'running') {
-    deviceStatus.value = 'fault'
-    faultName.value = '传感器通讯中断'
-    ElMessage.error(`设备发生故障: ${faultName.value}`)
-    // Auto-trigger AI analysis on fault
-    analyzeFault()
-  } else if (deviceStatus.value === 'fault') {
-    deviceStatus.value = 'running'
-    faultName.value = ''
-    faultAnalysis.value = '' // Clear previous analysis
-    ElMessage.success('设备已恢复正常')
-  }
+  requireAuth(() => {
+    if (deviceStatus.value === 'running') {
+      deviceStatus.value = 'fault'
+      faultName.value = '传感器通讯中断'
+      ElMessage.error(`设备发生故障: ${faultName.value}`)
+      // Auto-trigger AI analysis on fault
+      analyzeFault()
+    } else if (deviceStatus.value === 'fault') {
+      deviceStatus.value = 'running'
+      faultName.value = ''
+      faultAnalysis.value = '' // Clear previous analysis
+      ElMessage.success('设备已恢复正常')
+    }
+  })
 }
 
 const analyzeFault = async () => {
-  if (deviceStatus.value !== 'fault') {
-    ElMessage.warning('当前设备无故障，无需分析')
-    return
-  }
-  analysisLoading.value = true
-  faultAnalysis.value = '' // Clear previous result
+  requireAuth(async () => {
+    if (deviceStatus.value !== 'fault') {
+      ElMessage.warning('当前设备无故障，无需分析')
+      return
+    }
+    analysisLoading.value = true
+    faultAnalysis.value = '' // Clear previous result
 
-  try {
-    // Simulate AI API call
-    await new Promise(resolve => setTimeout(resolve, 3000))
-    faultAnalysis.value = `
+    try {
+      // Simulate AI API call
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      faultAnalysis.value = `
 ## 故障分析报告
 
 ### 设备信息
@@ -198,23 +227,25 @@ const analyzeFault = async () => {
 - 定期检查线路连接情况。
 - 加强设备接地，减少电磁干扰。
 `
-    ElMessage.success('AI分析完成')
-  } catch (error) {
-    ElMessage.error('AI分析失败')
-  } finally {
-    analysisLoading.value = false
-  }
+      ElMessage.success('AI分析完成')
+    } catch (error) {
+      ElMessage.error('AI分析失败')
+    } finally {
+      analysisLoading.value = false
+    }
+  })
 }
 
 const performShiftAnalysis = async () => {
-  isAnalyzingShift.value = true
-  showAnalysisResult.value = false
-  shiftAnalysisResult.value = ''
+  requireAuth(async () => {
+    isAnalyzingShift.value = true
+    showAnalysisResult.value = false
+    shiftAnalysisResult.value = ''
 
-  try {
-    // Simulate AI analysis for the shift
-    await new Promise(resolve => setTimeout(resolve, 5000)) // Longer simulation
-    shiftAnalysisResult.value = `
+    try {
+      // Simulate AI analysis for the shift
+      await new Promise(resolve => setTimeout(resolve, 5000)) // Longer simulation
+      shiftAnalysisResult.value = `
 ## 本班次生产分析报告
 
 ### 班次概览
@@ -239,19 +270,28 @@ const performShiftAnalysis = async () => {
 2. **操作培训**: 加强操作人员对设备初期故障现象的识别能力。
 3. **备件管理**: 确保常用传感器和通讯模块有充足备件。
 `
-    ElMessage.success('本班分析完成')
-  } catch (error) {
-    ElMessage.error('本班分析失败')
-  } finally {
-    isAnalyzingShift.value = false
-    showAnalysisResult.value = true
-  }
+      ElMessage.success('本班分析完成')
+    } catch (error) {
+      ElMessage.error('本班分析失败')
+    } finally {
+      isAnalyzingShift.value = false
+      showAnalysisResult.value = true
+    }
+  })
 }
 
 const closeShiftAnalysisResult = () => {
   showAnalysisResult.value = false
   shiftAnalysisResult.value = ''
+  isAnalyzingShift.value = false
 }
+
+// 监听登录状态变化，显示登录成功提示
+watch(() => authStore.isLoggedIn, (newValue, oldValue) => {
+  if (newValue === true && oldValue === false) {
+    ElMessage.success('登录成功！欢迎使用设备监控系统')
+  }
+}, { immediate: false })
 
 // Simulate real-time data updates
 onMounted(() => {
@@ -441,19 +481,27 @@ onMounted(() => {
       <!-- 本班分析 -->
       <div v-if="activeTab === 'analysis'" class="analysis-tab">
         <div v-if="!showAnalysisResult" class="shift-analysis-prompt">
-          <div v-if="isAnalyzingShift" class="tech-loader">
-            <div class="orbit"></div>
-            <div class="satellite"></div>
-            <div class="satellite"></div>
-            <div class="satellite"></div>
-            <div class="loading-text">分析中...</div>
+          <div v-if="isAnalyzingShift" class="analysis-loading-container">
+            <div class="container">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="loading-text enhanced">
+              <span class="jump-letter">努</span>
+              <span class="jump-letter">力</span>
+              <span class="jump-letter">分</span>
+              <span class="jump-letter">析</span>
+              <span class="jump-letter">中</span>
+            </div>
           </div>
           <button 
-            :class="['analyze-button', { 'is-analyzing': isAnalyzingShift }]"
+            v-if="!isAnalyzingShift"
+            class="analyze-button"
             @click="performShiftAnalysis"
-            :disabled="isAnalyzingShift"
           >
-            <span v-if="!isAnalyzingShift">开始分析</span>
+            开始分析
           </button>
         </div>
         <div v-if="showAnalysisResult" class="shift-analysis-result card">
@@ -462,6 +510,39 @@ onMounted(() => {
             <el-button type="danger" @click="closeShiftAnalysisResult" size="small">关闭</el-button>
           </div>
           <div class="markdown-content" v-html="md.render(shiftAnalysisResult)"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 登录提示弹窗 -->
+    <div v-if="showLoginPrompt" class="custom-dialog-overlay">
+      <div class="login-prompt-container">
+        <div class="login-prompt-header">
+          <div class="svg-wrapper-1">
+            <div class="svg-wrapper">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                <path fill="none" d="M0 0h24v24H0z"></path>
+                <path fill="currentColor" d="M1.946 9.315c-.522-.174-.527-.455.01-.634l19.087-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.455.547-.679.045L12 14l6-8-8 6-8.054-2.685z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="login-prompt-content">
+          <h3>请先登录，再使用哦</h3>
+          <p>登录后即可使用设备监控、故障分析等全部功能</p>
+        </div>
+        <div class="login-prompt-footer">
+          <button @click="openLoginDialog">
+            <div class="svg-wrapper-1">
+              <div class="svg-wrapper">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                  <path fill="none" d="M0 0h24v24H0z"></path>
+                  <path fill="currentColor" d="M1.946 9.315c-.522-.174-.527-.455.01-.634l19.087-6.362c.529-.176.832.12.684.638l-5.454 19.086c-.15.529-.455.547-.679.045L12 14l6-8-8 6-8.054-2.685z"></path>
+                </svg>
+              </div>
+            </div>
+            <span>去登陆</span>
+          </button>
         </div>
       </div>
     </div>
@@ -521,70 +602,63 @@ onMounted(() => {
 }
 
 /* 科技风加载动画 */
-.tech-loader {
-  position: relative;
-  width: 120px;
-  height: 120px;
-  margin: 0 auto 25px;
-}
-
-.orbit {
+.container {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border: 2px dashed rgba(64, 158, 255, 0.6);
-  border-radius: 50%;
-  animation: orbit-rotate 6s linear infinite;
-}
-
-.satellite {
-  position: absolute;
-  top: 0;
+  top: 50%;
   left: 50%;
-  width: 14px;
-  height: 14px;
   border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background-color: #409eff;
-  box-shadow: 0 0 15px #409eff, 0 0 30px rgba(64, 158, 255, 0.5);
+  height: 96px;
+  width: 96px;
+  animation: rotate_3922 1.2s linear infinite;
+  background-color: #9b59b6;
+  background-image: linear-gradient(#9b59b6, #84cdfa, #5ad1cd);
 }
 
-.satellite:nth-child(2) {
-  animation: satellite-orbit 4s -1s linear infinite;
+.container span {
+  position: absolute;
+  border-radius: 50%;
+  height: 100%;
+  width: 100%;
+  background-color: #9b59b6;
+  background-image: linear-gradient(#9b59b6, #84cdfa, #5ad1cd);
 }
 
-.satellite:nth-child(3) {
-  animation: satellite-orbit 5s -2s linear infinite;
+.container span:nth-of-type(1) {
+  filter: blur(5px);
 }
 
-.satellite:nth-child(4) {
-  animation: satellite-orbit 7s -3s linear infinite;
+.container span:nth-of-type(2) {
+  filter: blur(10px);
 }
 
-@keyframes orbit-rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.container span:nth-of-type(3) {
+  filter: blur(25px);
 }
 
-@keyframes satellite-orbit {
-  0% { transform: translate(-50%, -50%) rotate(0deg) translateX(60px); }
-  100% { transform: translate(-50%, -50%) rotate(360deg) translateX(60px); }
+.container span:nth-of-type(4) {
+  filter: blur(50px);
 }
 
-.loading-text {
-  text-align: center;
-  margin-top: 130px;
-  font-size: 18px;
-  color: #409eff;
-  text-shadow: 0 0 10px rgba(64, 158, 255, 0.5);
-  animation: text-pulse 2s infinite alternate;
+.container::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  background-color: #fff;
+  border: solid 5px #ffffff;
+  border-radius: 50%;
 }
 
-@keyframes text-pulse {
-  0% { opacity: 0.6; }
-  100% { opacity: 1; }
+@keyframes rotate_3922 {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
 }
 
 .analyze-button {
@@ -619,6 +693,8 @@ onMounted(() => {
   background-color: #f4f6f9;
   padding: 20px;
   border-radius: 8px;
+  width: 100%;
+  min-height: 670px;
 }
 
 .tab-navigation {
@@ -657,7 +733,7 @@ onMounted(() => {
   padding: 20px;
   border-radius: 0 0 8px 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  min-height: 500px;
+  min-height: 670px;
 }
 
 .card {
@@ -858,12 +934,56 @@ onMounted(() => {
   background-color: #909399;
 }
 
+.loading-text {
+  text-align: center;
+  font-size: 18px;
+  color: #666;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
 .shift-analysis-prompt {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 300px;
+  min-height: 75vh; /* 使用视口高度单位 */
+  padding: 5vh 0; /* 视口百分比留白 */
   flex-direction: column;
+  gap: 40px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.analysis-loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+}
+
+.loading-text.enhanced {
+  text-align: center;
+  font-size: 20px;
+  font-weight: bold;
+  color: #87CEEB;
+  margin-top: 20px;
+  margin-bottom: 0;
+}
+
+.jump-letter {
+  display: inline-block;
+  animation: jump 1s ease-in-out infinite;
+}
+
+.jump-letter:nth-child(1) { animation-delay: 0s; }
+.jump-letter:nth-child(2) { animation-delay: 0.1s; }
+.jump-letter:nth-child(3) { animation-delay: 0.2s; }
+.jump-letter:nth-child(4) { animation-delay: 0.3s; }
+.jump-letter:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes jump {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 
 .analyze-button.is-analyzing {
@@ -875,6 +995,130 @@ onMounted(() => {
   text-align: center;
   color: #909399;
   padding: 20px;
+}
+
+/* 登录提示弹窗样式 */
+.login-prompt-container {
+  max-width: 320px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(0, 0, 0, 0.07);
+  padding: 30px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-prompt-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: linear-gradient(90deg, #4e75ff, #3d5afe, #4e75ff);
+  background-size: 200% 100%;
+  animation: gradient 3s ease infinite;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.login-prompt-header {
+  margin-bottom: 25px;
+}
+
+.svg-wrapper-1 {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.svg-wrapper {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  background: rgba(78, 117, 255, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.svg-wrapper svg {
+  width: 30px;
+  height: 30px;
+  fill: #4e75ff;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.login-prompt-content h3 {
+  color: #2d3748;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+}
+
+.login-prompt-content p {
+  color: #718096;
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.login-prompt-footer {
+  margin-top: 25px;
+}
+
+.login-prompt-footer button {
+  background: linear-gradient(135deg, #4e75ff 0%, #3d5afe 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 30px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 15px rgba(78, 117, 255, 0.3);
+}
+
+.login-prompt-footer button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(78, 117, 255, 0.4);
+}
+
+.login-prompt-footer button:active {
+  transform: translateY(0);
+}
+
+.login-prompt-footer button .svg-wrapper-1 {
+  margin: 0;
+}
+
+.login-prompt-footer button .svg-wrapper {
+  width: 20px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.login-prompt-footer button .svg-wrapper svg {
+  width: 12px;
+  height: 12px;
+  fill: white;
+  animation: none;
 }
 </style>
 
@@ -919,5 +1163,41 @@ onMounted(() => {
 .unbind-confirm .el-button--primary {
   background: linear-gradient(to right, #ff6b6b, #f56c6c);
   border: none;
+}
+
+/* 登录提示弹窗遮罩层样式 */
+.custom-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.login-prompt-container {
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { 
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to { 
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 </style>

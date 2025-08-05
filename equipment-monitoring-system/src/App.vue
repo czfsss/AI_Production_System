@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Monitor, Tools, Reading, User, Setting } from '@element-plus/icons-vue'
+// 导入登录按钮组件
+import LoginButton from './components/LoginButton.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -47,20 +49,8 @@ const navigateTo = (moduleKey: string) => {
           </div>
         </nav>
 
-        <div class="user-section">
-          <el-icon size="20"><User /></el-icon>
-          <span>管理员</span>
-          <el-dropdown>
-            <el-icon class="cursor-pointer"><Setting /></el-icon>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item>个人设置</el-dropdown-item>
-                <el-dropdown-item>系统设置</el-dropdown-item>
-                <el-dropdown-item divided>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
+        <!-- 使用登录按钮组件替换原来的用户区域 -->
+        <LoginButton />
       </div>
     </header>
 
