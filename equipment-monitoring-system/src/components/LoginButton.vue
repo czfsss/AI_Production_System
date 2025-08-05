@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import { View, Hide } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
 
 // 控制登录弹窗的显示与隐藏
 const isLoginDialogVisible = ref(false)
+
+// 控制显示登录还是注册表单
+const isLoginMode = ref(true)
+
+// 控制密码显示/隐藏
+const showPassword = ref(false)
+const showRegisterPassword = ref(false)
+const showConfirmPassword = ref(false)
+
+// 控制忘记密码弹窗的显示与隐藏
+const isForgotPasswordVisible = ref(false)
 
 // 控制退出登录确认弹窗的显示与隐藏
 const isConfirmLogoutVisible = ref(false)
@@ -20,6 +32,30 @@ const openLoginDialog = () => {
 // 关闭登录弹窗
 const closeLoginDialog = () => {
   isLoginDialogVisible.value = false
+  // 恢复背景滚动
+  document.body.style.overflow = ''
+}
+
+// 打开忘记密码弹窗
+const openForgotPassword = () => {
+  isLoginDialogVisible.value = false
+  isForgotPasswordVisible.value = true
+  // 防止背景滚动
+  document.body.style.overflow = 'hidden'
+}
+
+// 关闭忘记密码弹窗
+const closeForgotPassword = () => {
+  isForgotPasswordVisible.value = false
+  // 恢复背景滚动
+  document.body.style.overflow = ''
+}
+
+// 模拟重置密码功能
+const handleResetPassword = (e: Event) => {
+  e.preventDefault()
+  // 这里只是模拟重置密码成功，实际应用中需要调用API
+  isForgotPasswordVisible.value = false
   // 恢复背景滚动
   document.body.style.overflow = ''
 }
@@ -46,11 +82,25 @@ const confirmLogout = () => {
   document.body.style.overflow = ''
 }
 
+// 切换登录/注册模式
+const toggleMode = () => {
+  isLoginMode.value = !isLoginMode.value
+}
+
 // 模拟登录功能
 const handleLogin = (e: Event) => {
   e.preventDefault()
   // 这里只是模拟登录成功，实际应用中需要调用API
   authStore.login()
+  isLoginDialogVisible.value = false
+  document.body.style.overflow = ''
+}
+
+// 模拟注册功能
+const handleRegister = (e: Event) => {
+  e.preventDefault()
+  // 这里只是模拟注册成功，实际应用中需要调用API
+  authStore.login() // 注册成功后直接登录
   isLoginDialogVisible.value = false
   document.body.style.overflow = ''
 }
@@ -85,13 +135,60 @@ const handleLogin = (e: Event) => {
     <div v-if="isLoginDialogVisible" class="custom-dialog-overlay">
       <div class="container">
         <button class="close-button" @click="closeLoginDialog">×</button>
-        <div class="heading">登录</div>
-        <form action="" class="form" @submit="handleLogin">
-          <input required class="input" type="email" name="email" id="email" placeholder="账号">
-          <input required class="input" type="password" name="password" id="password" placeholder="密码">
-          <span class="forgot-password"><a href="#">忘记密码?</a></span>
-          <input class="login-button" type="submit" value="登录">
+        <div class="heading">{{ isLoginMode ? '登录' : '注册' }}</div>
+        <template v-if="isLoginMode">
+          <form action="" class="form" @submit="handleLogin">
+            <input required class="input" type="email" name="email" id="email" placeholder="账号">
+            <div class="password-input-container">
+              <input required class="input" :type="showPassword ? 'text' : 'password'" name="password" id="password" placeholder="密码">
+              <button type="button" class="password-toggle" @click="showPassword = !showPassword">
+                <span v-if="showPassword"><Hide size="18" /></span>
+                <span v-else><View size="18" /></span>
+              </button>
+            </div>
+            <span class="forgot-password"><a href="#" @click.prevent="openForgotPassword">忘记密码?</a></span>
+            <input class="login-button" type="submit" value="登录">
+          </form>
+        </template>
+        <template v-else>
+          <form action="" class="form" @submit="handleRegister">
+            <input required class="input" type="text" name="username" id="username" placeholder="用户名">
+            <input required class="input" type="email" name="email" id="register-email" placeholder="邮箱">
+            <div class="password-input-container">
+              <input required class="input" :type="showRegisterPassword ? 'text' : 'password'" name="password" id="register-password" placeholder="密码">
+              <button type="button" class="password-toggle" @click="showRegisterPassword = !showRegisterPassword">
+                <span v-if="showRegisterPassword"><Hide size="18" /></span>
+                <span v-else><View size="18" /></span>
+              </button>
+            </div>
+            <div class="password-input-container">
+              <input required class="input" :type="showConfirmPassword ? 'text' : 'password'" name="confirmPassword" id="confirm-password" placeholder="确认密码">
+              <button type="button" class="password-toggle" @click="showConfirmPassword = !showConfirmPassword">
+                <span v-if="showConfirmPassword"><Hide size="18" /></span>
+                <span v-else><View size="18" /></span>
+              </button>
+            </div>
+            <input class="login-button" type="submit" value="注册">
+          </form>
+        </template>
+        <div class="switch-mode">
+          {{ isLoginMode ? '还没有账号?' : '已有账号?' }} <a href="#" @click.prevent="toggleMode">{{ isLoginMode ? '立即注册' : '返回登录' }}</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- 忘记密码弹窗 -->
+    <div v-if="isForgotPasswordVisible" class="custom-dialog-overlay">
+      <div class="container">
+        <button class="close-button" @click="closeForgotPassword">×</button>
+        <div class="heading">忘记密码</div>
+        <form action="" class="form" @submit="handleResetPassword">
+          <input required class="input" type="email" name="email" id="forgot-email" placeholder="请输入您的邮箱">
+          <input class="login-button" type="submit" value="发送重置链接">
         </form>
+        <div class="switch-mode">
+          <a href="#" @click.prevent="() => { closeForgotPassword(); isLoginDialogVisible = true; }">返回登录</a>
+        </div>
       </div>
     </div>
 
@@ -262,6 +359,64 @@ const handleLogin = (e: Event) => {
 .form .input:focus {
   outline: none;
   border-inline: 2px solid #12B1D1;
+}
+
+/* 密码输入框容器 */
+.password-input-container {
+  position: relative;
+  width: 100%;
+  margin-top: 15px;
+}
+
+.password-input-container .input {
+  width: 100%;
+  padding-right: 40px;
+  margin-top: 0;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(151, 224, 234, 0.8);
+  border: 1px solid #0099ff;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #0099ff;
+  padding: 8px;
+  width: 1px;
+  height: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.3s;
+  box-shadow: 0 2px 5px rgba(0, 153, 255, 0.2);
+}
+
+.password-toggle:hover {
+  color: #12B1D1;
+  background: white;
+  border-color: #12B1D1;
+  box-shadow: 0 2px 8px rgba(18, 177, 209, 0.3);
+}
+
+.switch-mode {
+  text-align: center;
+  margin-top: 15px;
+  font-size: 14px;
+  color: #666;
+}
+
+.switch-mode a {
+  color: #0099ff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.switch-mode a:hover {
+  text-decoration: underline;
 }
 
 .form .forgot-password {
