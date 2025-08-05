@@ -17,7 +17,7 @@ const activeModule = computed(() => {
 const modules = [
   { key: 'monitoring', name: '设备监控', icon: 'Monitor' },
   { key: 'maintenance', name: '辅助维修', icon: 'Tools' },
-  { key: 'knowledge', name: '工艺知识', icon: 'Reading' }
+  { key: 'knowledge', name: '智能问答', icon: 'Reading' }
 ]
 
 const navigateTo = (moduleKey: string) => {
@@ -75,5 +75,12 @@ const navigateTo = (moduleKey: string) => {
 /* App.vue 特有样式 */
 .cursor-pointer {
   cursor: pointer;
+}
+
+/* 全局背景样式 */
+.app-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f8fa 0%, #99b5e8 100%);
+  background-attachment: fixed;
 }
 </style>
