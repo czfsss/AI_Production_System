@@ -1,10 +1,63 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
+import * as echarts from 'echarts'
 import { useAuthStore } from '../stores/auth'
+
+type ShiftType = '甲班' | '乙班' | '丙班'
+type DeviceType = 'cigarette_machine' | 'packing_machine' | 'cartoning_machine'
+type ShiftValue = 'jia' | 'yi' | 'bing'
+type AlarmLevel = 'emergency' | 'important' | 'normal'
+type AlarmStatus = 'processed' | 'pending'
+
+interface MockDataItem {
+  date: string
+  甲班?: number
+  乙班?: number
+  丙班?: number
+  [key: string]: any
+}
+
+interface DeviceOption {
+  label: string
+  value: string | number
+}
+
+interface AlarmRecord {
+  id: number
+  mch_name: string
+  fault_time: string
+  stop_time: string
+  fault_name: string
+  mch_params: Record<string, any>
+  ai_analysis: string
+  class_group: string
+  class_shift: string
+}
+
+interface ChartFilters {
+  dateRange: [Date, Date]
+  shift: string
+}
+
+interface HistoryFilters {
+  dateRange: [Date, Date] | null
+  class_group: string
+  mch_name: string
+}
+
+interface ChartDataItem {
+  name: string
+  value: number
+}
+
+interface PieDataItem {
+  value: number
+  name: string
+}
 
 const authStore = useAuthStore()
 
@@ -30,7 +83,7 @@ const openLoginDialog = () => {
   }
 }
 
-const md: any = new MarkdownIt({
+const md: MarkdownIt = new MarkdownIt({
   highlight: function (str: string, lang: string) {
     if (lang && hljs.getLanguage(lang)) {
       try {
@@ -44,20 +97,23 @@ const md: any = new MarkdownIt({
 })
 
 // Tab Management
-const activeTab = ref('monitoring') // 'monitoring', 'alarms', 'analysis'
+const activeTab = ref('monitoring') // 'monitoring', 'fault-dashboard', 'analysis'
+
+// Fault Dashboard Sub-tabs
+const faultDashboardTab = ref('data-dashboard') // 'data-dashboard', 'history-records'
 
 // Device Binding
 const deviceType = ref('')
 const deviceNumber = ref('')
 const shift = ref('')
 const isDeviceBound = ref(false)
-const deviceTypes = [
+const deviceTypes: DeviceOption[] = [
   { label: '卷接机', value: 'cigarette_machine' },
   { label: '包装机', value: 'packing_machine' },
   { label: '封箱机', value: 'cartoning_machine' }
 ]
-const deviceNumbers = Array.from({ length: 22 }, (_, i) => ({ label: `${i + 1}#`, value: i + 1 }))
-const shifts = [
+const deviceNumbers: DeviceOption[] = Array.from({ length: 22 }, (_, i) => ({ label: `${i + 1}#`, value: i + 1 }))
+const shifts: DeviceOption[] = [
   { label: '甲班', value: 'jia' },
   { label: '乙班', value: 'yi' },
   { label: '丙班', value: 'bing' }
@@ -74,24 +130,39 @@ const faultAnalysis = ref('')
 const analysisLoading = ref(false)
 
 // Alarm Records (for 故障记录 tab)
-const alarmHistoryRecords = ref([
+const alarmHistoryRecords = ref<AlarmRecord[]>([
   {
-    id: 'ALM001',
-    deviceName: '包装机-3#',
-    alarmTime: '2024-01-15 14:20:00',
-    level: 'emergency',
-    content: '液压系统压力过高',
-    status: 'processed',
-    handler: '张工',
+    id: 1,
+    mch_name: '包装机-3#',
+    fault_time: '2024-01-15 14:20:00',
+    stop_time: '45分钟',
+    fault_name: '液压系统压力过高',
+    mch_params: { pressure: '120MPa', temperature: '25°C' },
+    ai_analysis: '液压系统压力过高，建议检查液压泵和压力传感器',
+    class_group: '甲班',
+    class_shift: '早班'
   },
   {
-    id: 'ALM002',
-    deviceName: '卷接机-15#',
-    alarmTime: '2024-01-15 10:15:00',
-    level: 'important',
-    content: '烟支供应中断',
-    status: 'processed',
-    handler: '李工',
+    id: 2,
+    mch_name: '卷接机-15#',
+    fault_time: '2024-01-15 10:15:00',
+    stop_time: '30分钟',
+    fault_name: '烟支供应中断',
+    mch_params: { speed: '8000支/分', humidity: '65%' },
+    ai_analysis: '烟支供应中断，检查供料系统和传送带',
+    class_group: '乙班',
+    class_shift: '中班'
+  },
+  {
+    id: 3,
+    mch_name: '封箱机-8#',
+    fault_time: '2024-01-16 08:30:00',
+    stop_time: '60分钟',
+    fault_name: '电机过载',
+    mch_params: { current: '15A', voltage: '380V' },
+    ai_analysis: '电机过载，建议检查负载和电机散热系统',
+    class_group: '丙班',
+    class_shift: '晚班'
   },
 ])
 
@@ -100,7 +171,291 @@ const isAnalyzingShift = ref(false)
 const shiftAnalysisResult = ref('')
 const showAnalysisResult = ref(false)
 
+// Fault Dashboard - Charts
+const chart1Ref = ref<HTMLElement | null>(null)
+const chart2Ref = ref<HTMLElement | null>(null)
+const chart3Ref = ref<HTMLElement | null>(null)
+let chart1Instance: echarts.ECharts | null = null
+let chart2Instance: echarts.ECharts | null = null
+let chart3Instance: echarts.ECharts | null = null
+
+// Fault Dashboard - Data
+const chartFilters = reactive<ChartFilters>({
+  dateRange: [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date()],
+  shift: ''
+})
+
+// History Records Filters
+const historyFilters = reactive<HistoryFilters>({
+  dateRange: [new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()],
+  class_group: '',
+  mch_name: ''
+})
+
+const isRefreshing = ref(false)
+const refreshInterval = ref<number | null>(null)
+
 // --- Functions ---
+
+// Fault Dashboard Functions
+const initCharts = () => {
+  if (chart1Ref.value) {
+    chart1Instance = echarts.init(chart1Ref.value)
+    updateChart1()
+  }
+  if (chart2Ref.value) {
+    chart2Instance = echarts.init(chart2Ref.value)
+    updateChart2()
+  }
+  if (chart3Ref.value) {
+    chart3Instance = echarts.init(chart3Ref.value)
+    updateChart3()
+  }
+}
+
+const updateChart1 = () => {
+  if (!chart1Instance) return
+  
+  // 生成模拟数据
+  const generateMockData = (): MockDataItem[] => {
+    const startDate = new Date(chartFilters.dateRange[0]);
+    const endDate = new Date(chartFilters.dateRange[1]);
+    const data: MockDataItem[] = [];
+    let currentDate = new Date(startDate);
+
+    while (currentDate <= endDate) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const item: MockDataItem = { date: dateStr };
+
+      // 如果选择了班组，只生成该班组的数据
+      if (chartFilters.shift) {
+        item[chartFilters.shift] = Math.floor(Math.random() * 6) + 1;
+      } else {
+        // 否则生成所有班组的数据
+        item['甲班'] = Math.floor(Math.random() * 6) + 1;
+        item['乙班'] = Math.floor(Math.random() * 6) + 1;
+        item['丙班'] = Math.floor(Math.random() * 6) + 1;
+      }
+
+      data.push(item);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return data;
+  };
+
+  const mockData = generateMockData();
+
+  // 确定要显示的班组
+  const series: any[] = [];
+  const legendData: string[] = [];
+  const colors = ['#4285F4', '#34A853', '#FBBC05'];
+  const shifts: ShiftType[] = chartFilters.shift ? [chartFilters.shift as ShiftType] : ['甲班', '乙班', '丙班'];
+
+  shifts.forEach((shift, index) => {
+    series.push({
+      name: shift,
+      type: 'bar',
+      smooth: true,
+      data: mockData.map(item => item[shift] || 0),
+      itemStyle: { borderRadius: [4, 4, 0, 0], color: colors[index % colors.length] }
+    });
+    legendData.push(shift);
+  });
+
+  const option = {
+    title: { text: '各班组当前设备故障次数统计', left: 'center', textStyle: { fontSize: 16 } },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' }
+    },
+    legend: { data: legendData, top: 40 },
+    toolbox: {
+      feature: {
+        magicType: { type: ['line', 'bar'] },
+        restore: {},
+        saveAsImage: {}
+      }
+    },
+    grid: { top: '25%', right: '3%', left: '3%', bottom: '3%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: mockData.map(item => item.date)
+    },
+    yAxis: {
+      type: 'value',
+      name: '故障次数'
+    },
+    series: series
+  }
+  chart1Instance.setOption(option)
+}
+
+const updateChart2 = () => {
+  if (!chart2Instance) return
+  
+  const mockData: ChartDataItem[] = [
+    { name: '液压系统压力过高', value: 45 },
+    { name: '烟支供应中断', value: 30 },
+    { name: '电机过载', value: 60 },
+    { name: '传感器故障', value: 25 },
+    { name: '温度异常', value: 35 },
+    { name: '润滑不足', value: 40 }
+  ]
+
+  const option = {
+    title: { text: '本班故障停机时长统计', left: 'center', textStyle: { fontSize: 16 } },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' }
+    },
+    toolbox: {
+      feature: {
+        magicType: { type: ['line', 'bar'] },
+        restore: {},
+        saveAsImage: {}
+      }
+    },
+    grid: { top: '20%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: mockData.map(item => item.name),
+      axisLabel: { rotate: 45 }
+    },
+    yAxis: {
+      type: 'value',
+      name: '停机时长(分钟)'
+    },
+    series: [{
+      type: 'bar',
+      smooth: true,
+      data: mockData.map(item => item.value),
+      itemStyle: {
+        borderRadius: [4, 4, 0, 0],
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#61A5FA' },
+          { offset: 1, color: '#316EF8' }
+        ])
+      }
+    }]
+  }
+  chart2Instance.setOption(option)
+}
+
+const updateChart3 = () => {
+  if (!chart3Instance) return
+  
+  const mockData: PieDataItem[] = [
+    { value: 15, name: '液压系统压力过高' },
+    { value: 12, name: '烟支供应中断' },
+    { value: 20, name: '电机过载' },
+    { value: 8, name: '传感器故障' },
+    { value: 10, name: '温度异常' },
+    { value: 5, name: '其他' }
+  ]
+
+  const option = {
+    title: { text: '故障分类统计', left: 'center', textStyle: { fontSize: 16 } },
+    tooltip: {
+      trigger: 'item',
+      formatter: '{a} <br/>{b}: {c} ({d}%)'
+    },
+    legend: {
+      orient: 'horizontal',
+      bottom: 10,
+      left: 'center'
+    },
+    grid: { top: '15%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
+    series: [{
+      name: '故障次数',
+      type: 'pie',
+      radius: ['40%', '70%'],
+      avoidLabelOverlap: false,
+      itemStyle: {
+        borderRadius: 10,
+        borderColor: '#fff',
+        borderWidth: 2
+      },
+      label: {
+        show: false,
+        position: 'center'
+      },
+      emphasis: {
+        label: {
+          show: true,
+          fontSize: 16,
+          fontWeight: 'bold'
+        },
+        itemStyle: {
+          shadowBlur: 10,
+          shadowOffsetX: 0,
+          shadowColor: 'rgba(0, 0, 0, 0.5)'
+        }
+      },
+      labelLine: {
+        show: false
+      },
+      data: mockData,
+      color: ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#673AB7', '#00BCD4']
+    }]
+  }
+  chart3Instance.setOption(option)
+}
+
+const refreshCharts = () => {
+  isRefreshing.value = true
+  setTimeout(() => {
+    updateChart1()
+    updateChart2()
+    updateChart3()
+    isRefreshing.value = false
+    ElMessage.success('图表数据已刷新')
+  }, 1000)
+}
+
+const startAutoRefresh = () => {
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value)
+  }
+  refreshInterval.value = setInterval(() => {
+    if (activeTab.value === 'fault-dashboard') {
+      refreshCharts()
+    }
+  }, 3 * 60 * 1000) // 3分钟
+}
+
+const stopAutoRefresh = () => {
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value)
+    refreshInterval.value = null
+  }
+}
+
+// Computed for filtered history records
+const filteredHistoryRecords = computed(() => {
+  let records = alarmHistoryRecords.value
+  
+  if (historyFilters.dateRange && historyFilters.dateRange[0]) {
+    const startDate = new Date(historyFilters.dateRange[0])
+    const endDate = new Date(historyFilters.dateRange[1])
+    records = records.filter(record => {
+      const recordDate = new Date(record.fault_time)
+      return recordDate >= startDate && recordDate <= endDate
+    })
+  }
+  
+  if (historyFilters.class_group) {
+    records = records.filter(record => record.class_group === historyFilters.class_group)
+  }
+  
+  if (historyFilters.mch_name) {
+    records = records.filter(record => 
+      record.mch_name.toLowerCase().includes(historyFilters.mch_name.toLowerCase())
+    )
+  }
+  
+  return records
+})
 
 const bindDevice = () => {
   requireAuth(() => {
@@ -163,18 +518,7 @@ const getStatusClass = (status: string) => {
   return `status-${status}`
 }
 
-const getAlarmLevelText = (level: string) => {
-  const levelMap: Record<string, string> = {
-    emergency: '紧急',
-    important: '重要',
-    normal: '一般'
-  }
-  return levelMap[level] || level
-}
 
-const getAlarmLevelClass = (level: string) => {
-  return `alarm-level-${level}`
-}
 
 const simulateDeviceFault = () => {
   requireAuth(() => {
@@ -306,6 +650,24 @@ onMounted(() => {
     return () => clearInterval(interval)
   }
 })
+
+watch(activeTab, (newTab) => {
+  if (newTab === 'fault-dashboard') {
+    setTimeout(() => {
+      initCharts()
+      startAutoRefresh()
+    }, 100)
+  } else {
+    stopAutoRefresh()
+  }
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+  if (chart1Instance) chart1Instance.dispose()
+  if (chart2Instance) chart2Instance.dispose()
+  if (chart3Instance) chart3Instance.dispose()
+})
 </script>
 
 <template>
@@ -319,10 +681,10 @@ onMounted(() => {
         设备状态监控
       </button>
       <button 
-        :class="['tab-button', { active: activeTab === 'alarms' }]"
-        @click="activeTab = 'alarms'"
+        :class="['tab-button', { active: activeTab === 'fault-dashboard' }]"
+        @click="activeTab = 'fault-dashboard'"
       >
-        报警记录
+        故障看板
       </button>
       <button 
         :class="['tab-button', { active: activeTab === 'analysis' }]"
@@ -451,31 +813,102 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 报警记录 -->
-      <div v-if="activeTab === 'alarms'" class="alarms-tab card">
-        <div class="card-header">
-          <h2 class="card-title">历史报警记录</h2>
+      <!-- 故障看板 -->
+      <div v-if="activeTab === 'fault-dashboard'" class="fault-dashboard">
+        <div class="card">
+          <!-- 内部标签页 -->
+          <el-tabs v-model="faultDashboardTab" class="fault-dashboard-tabs">
+            <el-tab-pane label="数据看板" name="data-dashboard">
+              <div class="header-actions">
+                <div class="filters-container">
+                  <el-date-picker
+                    v-model="chartFilters.dateRange"
+                    type="daterange"
+                    range-separator="至"
+                    start-placeholder="开始日期"
+                    end-placeholder="结束日期"
+                    style="width: 220px; margin-right: 10px;"
+                    @change="refreshCharts"
+                  />
+                  <el-select v-model="chartFilters.shift" placeholder="选择班组" clearable style="width: 120px; margin-right: 10px;" @change="refreshCharts">
+                    <el-option label="甲班" value="甲班" />
+                    <el-option label="乙班" value="乙班" />
+                    <el-option label="丙班" value="丙班" />
+                  </el-select>
+                </div>
+                <el-button 
+                  type="primary" 
+                  @click="refreshCharts" 
+                  :loading="isRefreshing"
+                  icon="Refresh"
+                >
+                  刷新数据
+                </el-button>
+              </div>
+              <div class="charts-container">
+                <div class="chart-row">
+                  <div class="chart-item">
+                    <div ref="chart1Ref" class="chart"></div>
+                  </div>
+                  <div class="chart-item">
+                    <div ref="chart2Ref" class="chart"></div>
+                  </div>
+                </div>
+                <div class="chart-row">
+                  <div class="chart-item full-width">
+                    <div ref="chart3Ref" class="chart"></div>
+                  </div>
+                </div>
+              </div>
+            </el-tab-pane>
+            
+            <el-tab-pane label="历史故障记录" name="history-records">
+              <div class="history-records">
+                <div class="filters">
+                  <el-row :gutter="20">
+                    <el-col :span="8">
+                      <el-date-picker
+                        v-model="historyFilters.dateRange"
+                        type="daterange"
+                        range-separator="至"
+                        start-placeholder="开始日期"
+                        end-placeholder="结束日期"
+                        style="width: 100%"
+                      />
+                    </el-col>
+                    <el-col :span="6">
+                      <el-select v-model="historyFilters.class_group" placeholder="选择班组" clearable>
+                        <el-option label="甲班" value="甲班" />
+                        <el-option label="乙班" value="乙班" />
+                        <el-option label="丙班" value="丙班" />
+                      </el-select>
+                    </el-col>
+                    <el-col :span="6">
+                      <el-input
+                        v-model="historyFilters.mch_name"
+                        placeholder="设备名称"
+                        clearable
+                      />
+                    </el-col>
+                    <el-col :span="4">
+                      <el-button type="primary" @click="() => {}" icon="Search">查询</el-button>
+                    </el-col>
+                  </el-row>
+                </div>
+                
+                <el-table :data="filteredHistoryRecords" style="width: 100%" stripe>
+                  <el-table-column prop="mch_name" label="设备名称" width="150" />
+                  <el-table-column prop="fault_time" label="故障时间" width="180" />
+                  <el-table-column prop="class_group" label="班组" width="80" />
+                  <el-table-column prop="fault_name" label="故障名称" width="150" />
+                  <el-table-column prop="mch_params" label="设备参数" width="200" />
+                  <el-table-column prop="ai_analysis" label="AI分析" />
+                  <el-table-column prop="class_shift" label="班次" width="80" />
+                </el-table>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
         </div>
-        <el-table :data="alarmHistoryRecords" style="width: 100%">
-          <el-table-column prop="deviceName" label="设备名称" width="150" />
-          <el-table-column prop="alarmTime" label="报警时间" width="180" />
-          <el-table-column prop="level" label="级别" width="100">
-            <template #default="scope">
-              <span :class="['alarm-tag', getAlarmLevelClass(scope.row.level)]">
-                {{ getAlarmLevelText(scope.row.level) }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="content" label="报警内容" />
-          <el-table-column prop="status" label="处理状态" width="100">
-             <template #default="scope">
-              <span :class="['status-tag', scope.row.status === 'processed' ? 'status-processed' : 'status-unprocessed']">
-                {{ scope.row.status === 'processed' ? '已处理' : '未处理' }}
-              </span>
-            </template>
-          </el-table-column>
-           <el-table-column prop="handler" label="处理人" width="100" />
-        </el-table>
       </div>
 
       <!-- 本班分析 -->
@@ -697,12 +1130,42 @@ onMounted(() => {
   min-height: 670px;
 }
 
+.filters-container {
+  display: flex;
+  align-items: center;
+  margin-right: 20px;
+}
+
 .tab-navigation {
   display: flex;
   background-color: #fff;
   border-radius: 8px 8px 0 0;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .tab-button,
+  .bind-button,
+  .analyze-button,
+  .el-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .status-indicator {
+    padding: 12px 20px;
+  }
+
+  .param-item {
+    padding: 12px;
+  }
+
+  .el-select .el-input__wrapper,
+  .el-date-picker .el-input__wrapper {
+    min-height: 44px;
+  }
 }
 
 .tab-button {
@@ -1120,7 +1583,340 @@ onMounted(() => {
   fill: white;
   animation: none;
 }
-</style>
+/* 故障看板样式 */
+  .fault-dashboard {
+    padding: 20px;
+  }
+
+  .fault-dashboard .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    align-items: center;
+  }
+
+  .fault-dashboard-tabs {
+    margin-top: 20px;
+  }
+
+  .fault-dashboard-tabs :deep(.el-tabs__nav-wrap) {
+    display: flex;
+    justify-content: center;
+  }
+
+  .fault-dashboard-tabs :deep(.el-tabs__nav-scroll) {
+    display: flex;
+    justify-content: center;
+  }
+
+  .fault-dashboard-tabs :deep(.el-tabs__nav) {
+    display: flex;
+    justify-content: center;
+  }
+
+  .charts-container {
+    padding: 20px;
+  }
+
+  .chart-row {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .chart-item {
+    flex: 1;
+    background: #fff;
+    border: 1px solid #e4e7ed;
+    border-radius: 4px;
+    padding: 15px;
+  }
+
+  .chart-item.full-width {
+    flex: 1 1 100%;
+  }
+
+  .chart {
+    width: 100%;
+    height: 300px;
+  }
+
+  .history-records {
+    padding: 20px;
+  }
+
+  .filters {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: #f5f7fa;
+    border-radius: 4px;
+  }
+
+  /* 响应式设计 */
+  @media (max-width: 768px) {
+    /* 主要布局 */
+    .monitoring-view {
+      padding: 10px;
+      min-height: auto;
+    }
+
+    /* 标签页导航 */
+    .tab-navigation {
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .tab-button {
+      padding: 12px 15px;
+      font-size: 14px;
+    }
+
+    .tab-content {
+      padding: 15px;
+      min-height: auto;
+    }
+
+    /* 监控布局 */
+    .monitoring-layout {
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .left-column, .right-column {
+      flex: none;
+    }
+
+    /* 设备状态卡片 */
+    .status-display h3 {
+      font-size: 16px;
+    }
+
+    .status-indicator {
+      padding: 10px 16px;
+      font-size: 14px;
+    }
+
+    /* 设备参数网格 */
+    .params-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    /* 故障看板 */
+    .fault-dashboard {
+      padding: 10px;
+    }
+
+    .header-actions {
+      flex-direction: column;
+      gap: 15px;
+      padding: 15px;
+    }
+
+    .filters-container {
+      flex-direction: column;
+      margin-right: 0;
+      gap: 10px;
+    }
+
+    .filters-container .el-date-picker,
+    .filters-container .el-select {
+      width: 100% !important;
+      margin-right: 0 !important;
+    }
+
+    /* 图表容器 */
+    .chart-row {
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+    
+    .chart-item {
+      margin-bottom: 15px;
+      padding: 10px;
+    }
+
+    .chart {
+      height: 250px;
+    }
+
+    .charts-container {
+      padding: 15px;
+    }
+
+    /* 历史记录表格 */
+    .history-records {
+      padding: 15px;
+    }
+
+    .filters {
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+
+    .filters .el-col {
+      margin-bottom: 15px;
+    }
+
+    .filters .el-col:last-child {
+      margin-bottom: 0;
+    }
+
+    /* 表格响应式 */
+    .el-table {
+      font-size: 12px;
+    }
+
+    .el-table .cell {
+      padding: 8px 4px;
+    }
+
+    /* 设备绑定表单 */
+    .device-binding-form h2 {
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+
+    .enhanced-select :deep(.el-input__wrapper) {
+      height: 40px;
+      padding: 4px 12px;
+    }
+
+    .bind-button {
+      height: 44px;
+      font-size: 14px;
+    }
+
+    /* 分析按钮 */
+    .analyze-button {
+      padding: 14px 40px;
+      font-size: 16px;
+    }
+
+    /* 登录提示弹窗 */
+    .login-prompt-container {
+      margin: 20px;
+      max-width: calc(100vw - 40px);
+    }
+
+    /* 卡片头部 */
+    .card-header {
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .card-header h2 {
+      font-size: 18px;
+    }
+  }
+
+  /* 平板设备适配 */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .monitoring-view {
+      padding: 15px;
+    }
+
+    .monitoring-layout {
+      gap: 15px;
+    }
+
+    .params-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .header-actions {
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    .filters-container {
+      flex-wrap: wrap;
+    }
+
+    .chart {
+      height: 280px;
+    }
+  }
+
+  /* 小屏幕手机适配 */
+  @media (max-width: 480px) {
+    .monitoring-view {
+      padding: 8px;
+    }
+
+    .tab-button {
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .tab-content {
+      padding: 12px;
+    }
+
+    .status-display h3 {
+      font-size: 14px;
+    }
+
+    .status-indicator {
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .chart {
+      height: 200px;
+    }
+
+    .history-records {
+      padding: 12px;
+    }
+
+    .filters {
+      padding: 12px;
+    }
+
+    .el-table {
+      font-size: 11px;
+    }
+
+    .device-binding-form h2 {
+      font-size: 18px;
+    }
+
+    .analyze-button {
+      padding: 12px 30px;
+      font-size: 14px;
+    }
+  }
+
+  /* 横屏模式适配 */
+  @media (max-width: 768px) and (orientation: landscape) {
+    .tab-navigation {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .tab-button {
+      flex: 1;
+      min-width: 100px;
+    }
+
+    .chart {
+      height: 200px;
+    }
+  }
+  </style>
 
 <style>
 /* 解绑弹窗样式 */

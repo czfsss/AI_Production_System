@@ -178,4 +178,222 @@ li {
     min-height: 550px;
   }
 }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .maintenance-view {
+    padding: 15px;
+  }
+
+  .maintenance-container {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .card {
+    min-height: 500px;
+    border-radius: 12px;
+  }
+
+  .section-header {
+    padding: 15px 20px;
+  }
+
+  .section-title {
+    font-size: 16px;
+  }
+
+  .iframe-container {
+    padding: 3px;
+    border-radius: 12px;
+  }
+
+  .iframe-container iframe {
+    min-height: 500px;
+  }
+
+  .placeholder-content {
+    padding: 20px;
+  }
+
+  .feature-card {
+    padding: 20px;
+    border-radius: 12px;
+  }
+
+  .feature-icon {
+    font-size: 40px;
+    margin-bottom: 20px;
+  }
+
+  .placeholder-text {
+    font-size: 16px;
+    margin-bottom: 25px;
+  }
+
+  .feature-list {
+    font-size: 14px;
+    margin-bottom: 15px;
+  }
+
+  ul {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    max-width: 250px;
+  }
+
+  li {
+    font-size: 13px;
+  }
+}
+
+/* 小屏幕手机适配 */
+@media (max-width: 480px) {
+  .maintenance-view {
+    padding: 12px;
+  }
+
+  .maintenance-container {
+    gap: 15px;
+  }
+
+  .card {
+    min-height: 450px;
+  }
+
+  .section-header {
+    padding: 12px 15px;
+  }
+
+  .section-title {
+    font-size: 15px;
+  }
+
+  .iframe-container iframe {
+    min-height: 400px;
+  }
+
+  .placeholder-content {
+    padding: 15px;
+  }
+
+  .feature-card {
+    padding: 15px;
+  }
+
+  .feature-icon {
+    font-size: 36px;
+    margin-bottom: 15px;
+  }
+
+  .placeholder-text {
+    font-size: 15px;
+    margin-bottom: 20px;
+  }
+
+  .feature-list {
+    font-size: 13px;
+  }
+
+  li {
+    font-size: 12px;
+  }
+}
+
+/* 平板设备适配 */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .maintenance-view {
+    padding: 18px;
+  }
+
+  .maintenance-container {
+    gap: 22px;
+  }
+
+  .card {
+    min-height: 520px;
+  }
+
+  .section-header {
+    padding: 16px 22px;
+  }
+
+  .section-title {
+    font-size: 17px;
+  }
+
+  .iframe-container iframe {
+    min-height: 550px;
+  }
+
+  .placeholder-content {
+    padding: 25px;
+  }
+
+  .feature-card {
+    padding: 25px;
+  }
+
+  .feature-icon {
+    font-size: 44px;
+    margin-bottom: 22px;
+  }
+
+  .placeholder-text {
+    font-size: 17px;
+    margin-bottom: 28px;
+  }
+}
+
+/* 横屏模式适配 */
+@media (max-width: 768px) and (orientation: landscape) {
+  .maintenance-view {
+    padding: 10px;
+  }
+
+  .maintenance-container {
+    gap: 15px;
+  }
+
+  .card {
+    min-height: 350px;
+  }
+
+  .iframe-container iframe {
+    min-height: 350px;
+  }
+
+  .placeholder-content {
+    padding: 15px;
+  }
+
+  .feature-card {
+    padding: 15px;
+  }
+
+  ul {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .section-header {
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+  }
+
+  .feature-card {
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .iframe-container iframe {
+    min-height: 500px;
+  }
+}
 </style>
