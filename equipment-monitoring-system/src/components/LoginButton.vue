@@ -87,22 +87,112 @@ const toggleMode = () => {
   isLoginMode.value = !isLoginMode.value
 }
 
-// 模拟登录功能
-const handleLogin = (e: Event) => {
+// 登录功能
+const handleLogin = async (e: Event) => {
   e.preventDefault()
-  // 这里只是模拟登录成功，实际应用中需要调用API
-  authStore.login()
-  isLoginDialogVisible.value = false
-  document.body.style.overflow = ''
+  const form = e.target as HTMLFormElement
+  const formData = new FormData(form)
+  
+  const loginData = {
+    username: formData.get('username') as string,
+    password: formData.get('password') as string
+  }
+  
+  try {
+    // 调用后端登录API
+    const response = await fetch('http://127.0.0.1:8000/api/user/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(loginData)
+    })
+    
+    if (response.ok) {
+      const userData = await response.json()
+      // 登录成功，更新用户状态
+      authStore.login(userData)
+      isLoginDialogVisible.value = false
+      document.body.style.overflow = ''
+      alert('登录成功！')
+    } else {
+      const errorData = await response.json()
+      let errorMessage = '登录失败'
+      
+      if (response.status === 422) {
+        // 处理422验证错误
+        if (errorData.detail && Array.isArray(errorData.detail)) {
+          // FastAPI验证错误格式
+          errorMessage = errorData.detail.map((err: {loc: string[], msg: string}) => `${err.loc[err.loc.length - 1]}: ${err.msg}`).join(', ')
+        } else {
+          errorMessage = errorData.detail || '表单验证失败'
+        }
+      } else {
+        // 处理其他错误
+        errorMessage = errorData.detail || '账号或密码错误'
+      }
+      
+      alert(errorMessage)
+    }
+  } catch (error) {
+    console.error('登录请求失败：', error)
+    alert('登录请求失败，请检查网络连接')
+  }
 }
 
-// 模拟注册功能
-const handleRegister = (e: Event) => {
+// 注册功能
+const handleRegister = async (e: Event) => {
   e.preventDefault()
-  // 这里只是模拟注册成功，实际应用中需要调用API
-  authStore.login() // 注册成功后直接登录
-  isLoginDialogVisible.value = false
-  document.body.style.overflow = ''
+  const form = e.target as HTMLFormElement
+  const formData = new FormData(form)
+  
+  const registerData = {
+    nickname: formData.get('nickname') as string,
+    username: formData.get('username') as string,
+    password: formData.get('password') as string,
+    confirm_password: formData.get('confirmPassword') as string
+  }
+  
+  try {
+    // 调用后端注册API
+    const response = await fetch('http://127.0.0.1:8000/api/user/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(registerData)
+    })
+    
+    if (response.ok) {
+      const userData = await response.json()
+      // 注册成功，自动登录
+      authStore.login(userData)
+      isLoginDialogVisible.value = false
+      document.body.style.overflow = ''
+      alert('注册成功！')
+    } else {
+      const errorData = await response.json()
+      let errorMessage = '注册失败'
+      
+      if (response.status === 422) {
+        // 处理422验证错误
+        if (errorData.detail && Array.isArray(errorData.detail)) {
+          // FastAPI验证错误格式
+          errorMessage = errorData.detail.map((err: {loc: string[], msg: string}) => `${err.loc[err.loc.length - 1]}: ${err.msg}`).join(', ')
+        } else {
+          errorMessage = errorData.detail || '表单验证失败'
+        }
+      } else {
+        // 处理其他错误
+        errorMessage = errorData.detail || '未知错误'
+      }
+      
+      alert(errorMessage)
+    }
+  } catch (error) {
+    console.error('注册请求失败：', error)
+    alert('注册请求失败，请检查网络连接')
+  }
 }
 </script>
 
@@ -118,7 +208,7 @@ const handleRegister = (e: Event) => {
     <!-- 登录状态显示用户信息 (保持原有样式) -->
     <div v-else class="user-section">
       <el-icon size="20"><User /></el-icon>
-      <span>用户</span>
+      <span>{{ authStore.userInfo?.nickname || '用户' }}</span>
       <el-dropdown>
         <el-icon class="cursor-pointer"><Setting /></el-icon>
         <template #dropdown>
@@ -138,7 +228,7 @@ const handleRegister = (e: Event) => {
         <div class="heading">{{ isLoginMode ? '登录' : '注册' }}</div>
         <template v-if="isLoginMode">
           <form action="" class="form" @submit="handleLogin">
-            <input required class="input" type="email" name="email" id="email" placeholder="账号">
+            <input required class="input" type="text" name="username" id="username" placeholder="工号(7位数字)" maxlength="7" pattern="\d{7}">
             <div class="password-input-container">
               <input required class="input" :type="showPassword ? 'text' : 'password'" name="password" id="password" placeholder="密码">
               <button type="button" class="password-toggle" @click="showPassword = !showPassword">
@@ -152,8 +242,8 @@ const handleRegister = (e: Event) => {
         </template>
         <template v-else>
           <form action="" class="form" @submit="handleRegister">
-            <input required class="input" type="text" name="username" id="username" placeholder="用户名">
-            <input required class="input" type="email" name="email" id="register-email" placeholder="邮箱">
+            <input required class="input" type="text" name="nickname" id="nickname" placeholder="昵称">
+            <input required class="input" type="text" name="username" id="username" placeholder="工号(7位数字)" maxlength="7" pattern="\d{7}">
             <div class="password-input-container">
               <input required class="input" :type="showRegisterPassword ? 'text' : 'password'" name="password" id="register-password" placeholder="密码">
               <button type="button" class="password-toggle" @click="showRegisterPassword = !showRegisterPassword">

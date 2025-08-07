@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import * as echarts from 'echarts'
 import { useAuthStore } from '../stores/auth'
+import { faultService } from '../services/fault'
 
 type ShiftType = '甲班' | '乙班' | '丙班'
 type DeviceType = 'cigarette_machine' | 'packing_machine' | 'cartoning_machine'
@@ -130,41 +131,84 @@ const faultAnalysis = ref('')
 const analysisLoading = ref(false)
 
 // Alarm Records (for 故障记录 tab)
-const alarmHistoryRecords = ref<AlarmRecord[]>([
-  {
-    id: 1,
-    mch_name: '包装机-3#',
-    fault_time: '2024-01-15 14:20:00',
-    stop_time: '45分钟',
-    fault_name: '液压系统压力过高',
-    mch_params: { pressure: '120MPa', temperature: '25°C' },
-    ai_analysis: '液压系统压力过高，建议检查液压泵和压力传感器',
-    class_group: '甲班',
-    class_shift: '早班'
-  },
-  {
-    id: 2,
-    mch_name: '卷接机-15#',
-    fault_time: '2024-01-15 10:15:00',
-    stop_time: '30分钟',
-    fault_name: '烟支供应中断',
-    mch_params: { speed: '8000支/分', humidity: '65%' },
-    ai_analysis: '烟支供应中断，检查供料系统和传送带',
-    class_group: '乙班',
-    class_shift: '中班'
-  },
-  {
-    id: 3,
-    mch_name: '封箱机-8#',
-    fault_time: '2024-01-16 08:30:00',
-    stop_time: '60分钟',
-    fault_name: '电机过载',
-    mch_params: { current: '15A', voltage: '380V' },
-    ai_analysis: '电机过载，建议检查负载和电机散热系统',
-    class_group: '丙班',
-    class_shift: '晚班'
-  },
-])
+const alarmHistoryRecords = ref<AlarmRecord[]>([])
+const isLoadingFaultRecords = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(10)
+const totalRecords = ref(0)
+
+// 故障记录详情弹窗
+const showFaultDetailDialog = ref(false)
+const selectedFaultRecord = ref<AlarmRecord | null>(null)
+
+// 打开故障记录详情弹窗
+const openFaultDetail = (record: AlarmRecord) => {
+  selectedFaultRecord.value = record
+  showFaultDetailDialog.value = true
+}
+
+// 关闭故障记录详情弹窗
+const closeFaultDetail = () => {
+  showFaultDetailDialog.value = false
+  selectedFaultRecord.value = null
+}
+
+// 格式化时间显示
+const formatDateTime = (dateTimeStr: string) => {
+  if (!dateTimeStr) return ''
+  // 移除时区信息，只保留年月日时分秒
+  return dateTimeStr.replace('T', ' ').substring(0, 19)
+}
+
+// 查询历史故障记录
+const queryFaultHistory = async () => {
+  requireAuth(async () => {
+    isLoadingFaultRecords.value = true
+    try {
+      const params = {
+        start_date: historyFilters.dateRange?.[0] ? historyFilters.dateRange[0].toISOString().split('T')[0] : undefined,
+        end_date: historyFilters.dateRange?.[1] ? historyFilters.dateRange[1].toISOString().split('T')[0] : undefined,
+        class_group: historyFilters.class_group || undefined,
+        mch_name: historyFilters.mch_name || undefined,
+        page: currentPage.value,
+        page_size: pageSize.value,
+        sort_by: 'fault_time',
+        sort_order: 'desc'
+      }
+      
+      const result = await faultService.queryFaultHistory(params)
+      // 将FaultRecord[]转换为AlarmRecord[]，添加id属性
+      alarmHistoryRecords.value = result.records.map((record, index) => ({
+        id: index + 1, // 临时生成id
+        ...record
+      })) || []
+      totalRecords.value = result.total || 0
+      ElMessage.success('查询成功')
+    } catch (error: any) {
+      ElMessage.error('查询失败：' + (error.message || '未知错误'))
+    } finally {
+      isLoadingFaultRecords.value = false
+    }
+  })
+}
+
+// 组件挂载时加载初始数据
+onMounted(() => {
+  // 如果当前标签页是历史故障记录，则自动加载数据
+  if (activeTab.value === 'fault-dashboard' && faultDashboardTab.value === 'history-records') {
+    queryFaultHistory()
+  }
+})
+
+// 监听标签页变化，自动加载数据
+watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => {
+  if (newActiveTab === 'fault-dashboard' && newFaultDashboardTab === 'history-records') {
+    // 只有当数据为空时才自动加载，避免重复请求
+    if (alarmHistoryRecords.value.length === 0) {
+      queryFaultHistory()
+    }
+  }
+})
 
 // Shift Analysis (for 本班分析 tab)
 const isAnalyzingShift = ref(false)
@@ -431,30 +475,9 @@ const stopAutoRefresh = () => {
   }
 }
 
-// Computed for filtered history records
+// Computed for filtered history records (data is already filtered by API)
 const filteredHistoryRecords = computed(() => {
-  let records = alarmHistoryRecords.value
-  
-  if (historyFilters.dateRange && historyFilters.dateRange[0]) {
-    const startDate = new Date(historyFilters.dateRange[0])
-    const endDate = new Date(historyFilters.dateRange[1])
-    records = records.filter(record => {
-      const recordDate = new Date(record.fault_time)
-      return recordDate >= startDate && recordDate <= endDate
-    })
-  }
-  
-  if (historyFilters.class_group) {
-    records = records.filter(record => record.class_group === historyFilters.class_group)
-  }
-  
-  if (historyFilters.mch_name) {
-    records = records.filter(record => 
-      record.mch_name.toLowerCase().includes(historyFilters.mch_name.toLowerCase())
-    )
-  }
-  
-  return records
+  return alarmHistoryRecords.value
 })
 
 const bindDevice = () => {
@@ -886,25 +909,50 @@ onUnmounted(() => {
                     <el-col :span="6">
                       <el-input
                         v-model="historyFilters.mch_name"
-                        placeholder="设备名称"
+                        placeholder="故障名称"
                         clearable
                       />
                     </el-col>
                     <el-col :span="4">
-                      <el-button type="primary" @click="() => {}" icon="Search">查询</el-button>
+                      <el-button type="primary" @click="queryFaultHistory" icon="Search" :loading="isLoadingFaultRecords">查询</el-button>
                     </el-col>
                   </el-row>
                 </div>
                 
-                <el-table :data="filteredHistoryRecords" style="width: 100%" stripe>
+                <el-table :data="filteredHistoryRecords" style="width: 100%" stripe v-loading="isLoadingFaultRecords" @row-click="openFaultDetail">
                   <el-table-column prop="mch_name" label="设备名称" width="150" />
-                  <el-table-column prop="fault_time" label="故障时间" width="180" />
+                  <el-table-column prop="fault_time" label="故障时间" width="180">
+                    <template #default="{ row }">
+                      {{ formatDateTime(row.fault_time) }}
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="class_group" label="班组" width="80" />
                   <el-table-column prop="fault_name" label="故障名称" width="150" />
-                  <el-table-column prop="mch_params" label="设备参数" width="200" />
+                  <el-table-column prop="mch_params" label="设备参数" width="200">
+                    <template #default="{ row }">
+                      <div v-if="row.mch_params && typeof row.mch_params === 'object'">
+                        <div v-for="(value, key) in row.mch_params" :key="key" class="param-item">
+                          {{ key }}: {{ value }}
+                        </div>
+                      </div>
+                      <span v-else>{{ row.mch_params || '-' }}</span>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="ai_analysis" label="AI分析" />
                   <el-table-column prop="class_shift" label="班次" width="80" />
                 </el-table>
+                
+                <div class="pagination-container" style="margin-top: 20px; text-align: right;">
+                  <el-pagination
+                    v-model:current-page="currentPage"
+                    v-model:page-size="pageSize"
+                    :page-sizes="[10, 20, 50, 100]"
+                    :total="totalRecords"
+                    layout="total, sizes, prev, pager, next, jumper"
+                    @size-change="queryFaultHistory"
+                    @current-change="queryFaultHistory"
+                  />
+                </div>
               </div>
             </el-tab-pane>
           </el-tabs>
@@ -979,6 +1027,76 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 故障记录详情弹窗 -->
+    <el-dialog
+      v-model="showFaultDetailDialog"
+      title="故障记录详情"
+      width="80%"
+      :before-close="closeFaultDetail"
+      class="fault-detail-dialog"
+    >
+      <div v-if="selectedFaultRecord" class="fault-detail-content">
+        <div class="detail-section">
+          <h3>基本信息</h3>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <label>设备名称：</label>
+              <span>{{ selectedFaultRecord.mch_name }}</span>
+            </div>
+            <div class="detail-item">
+              <label>故障时间：</label>
+              <span>{{ formatDateTime(selectedFaultRecord.fault_time) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>停机时间：</label>
+              <span>{{ formatDateTime(selectedFaultRecord.stop_time) }}</span>
+            </div>
+            <div class="detail-item">
+              <label>班组：</label>
+              <span>{{ selectedFaultRecord.class_group }}</span>
+            </div>
+            <div class="detail-item">
+              <label>班次：</label>
+              <span>{{ selectedFaultRecord.class_shift }}</span>
+            </div>
+            <div class="detail-item">
+              <label>故障名称：</label>
+              <span>{{ selectedFaultRecord.fault_name }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h3>设备参数</h3>
+          <div class="params-container">
+            <div v-if="selectedFaultRecord.mch_params && typeof selectedFaultRecord.mch_params === 'object'">
+              <div v-for="(value, key) in selectedFaultRecord.mch_params" :key="key" class="param-item">
+                <strong>{{ key }}:</strong> {{ value }}
+              </div>
+            </div>
+            <div v-else>
+              <p>{{ selectedFaultRecord.mch_params || '无设备参数数据' }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h3>AI分析结果</h3>
+          <div class="ai-analysis-container">
+            <div v-if="selectedFaultRecord.ai_analysis" class="markdown-content" v-html="md.render(selectedFaultRecord.ai_analysis)"></div>
+            <div v-else class="no-analysis">
+              <p>暂无AI分析结果</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="closeFaultDetail">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1916,7 +2034,198 @@ onUnmounted(() => {
       height: 200px;
     }
   }
-  </style>
+  /* 设备参数样式 */
+.param-item {
+  font-size: 12px;
+  color: #666;
+  margin: 2px 0;
+  padding: 2px 6px;
+  background-color: #f5f7fa;
+  border-radius: 3px;
+  display: inline-block;
+  margin-right: 5px;
+}
+
+.param-item:not(:last-child) {
+  margin-bottom: 3px;
+}
+
+/* 故障记录详情弹窗样式 */
+.fault-detail-dialog {
+  border-radius: 12px;
+}
+
+.fault-detail-dialog .el-dialog__header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px 12px 0 0;
+}
+
+.fault-detail-dialog .el-dialog__title {
+  color: white;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.fault-detail-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: white;
+  font-size: 20px;
+}
+
+.fault-detail-content {
+  padding: 20px 0;
+}
+
+.detail-section {
+  margin-bottom: 25px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.detail-section h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+}
+
+.detail-section h3::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: #667eea;
+  margin-right: 8px;
+  border-radius: 2px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.detail-item label {
+  font-weight: 600;
+  color: #555;
+  margin-right: 8px;
+  min-width: 80px;
+}
+
+.detail-item span {
+  color: #333;
+  font-size: 14px;
+}
+
+.params-container {
+  background: white;
+  padding: 15px;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.params-container .param-item {
+  display: block;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #f1f3f4;
+  border-radius: 4px;
+  border-left: 3px solid #667eea;
+  font-size: 13px;
+}
+
+.params-container .param-item strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.ai-analysis-container {
+  background: white;
+  padding: 20px;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  min-height: 100px;
+}
+
+.ai-analysis-container .markdown-content {
+  line-height: 1.6;
+  color: #333;
+}
+
+.ai-analysis-container .markdown-content h1,
+.ai-analysis-container .markdown-content h2,
+.ai-analysis-container .markdown-content h3 {
+  color: #667eea;
+  margin-top: 15px;
+  margin-bottom: 10px;
+}
+
+.ai-analysis-container .markdown-content p {
+  margin-bottom: 10px;
+}
+
+.ai-analysis-container .markdown-content code {
+  background: #f1f3f4;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.ai-analysis-container .markdown-content pre {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+
+.no-analysis {
+  text-align: center;
+  color: #999;
+  font-style: italic;
+  padding: 20px;
+}
+
+.dialog-footer {
+  text-align: right;
+  padding: 15px 0 0 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .fault-detail-dialog .el-dialog {
+    width: 95% !important;
+    margin: 10px auto;
+  }
+  
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .detail-section {
+    padding: 15px;
+    margin-bottom: 15px;
+  }
+  
+  .params-container,
+  .ai-analysis-container {
+    padding: 15px;
+  }
+}
+</style>
 
 <style>
 /* 解绑弹窗样式 */

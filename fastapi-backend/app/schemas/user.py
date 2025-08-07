@@ -1,4 +1,5 @@
 from pydantic import BaseModel, validator, Field
+from typing import Optional
 
 
 # 注册模型
@@ -37,8 +38,31 @@ class LoginModel(BaseModel):
     )  # 工号 7位数字的字符串
     password: str = Field(description="密码")  # 密码
 
+# 修改密码模型
+class UpdatePasswordModel(BaseModel):
+    username: str = Field(description="工号")
+    old_password: Optional[str] = Field(None, description="旧密码")
+    new_password: str = Field(description="新密码")
+    confirm_password: str = Field(description="确认新密码")
+    
+    @validator("new_password")
+    def new_password_must_be_strong(cls, v):
+        if len(v) < 8:
+            raise ValueError("密码必须至少为8位")
+        return v
+
+    @validator("confirm_password")
+    def confirm_password_must_match(cls, v, values):
+        if "new_password" in values and v != values["new_password"]:
+            raise ValueError("两次输入的密码不一致！")
+        return v
+
+# 查询模型
+class QueryModel(BaseModel):
+    username: str = Field(description="工号")
 
 # 登录返回用户信息
 class LoginResponseModel(BaseModel):
     username: str = Field(description="工号")
     nickname: str = Field(description="昵称")
+    password: str = Field(description="密码")
