@@ -31,10 +31,7 @@ export interface FaultRecord {
   class_shift: string
 }
 
-export interface FaultQueryResponse {
-  records: FaultRecord[]
-  total: number
-}
+export type FaultQueryResponse = FaultRecord[]
 
 export const faultService = {
   // 查询历史故障记录

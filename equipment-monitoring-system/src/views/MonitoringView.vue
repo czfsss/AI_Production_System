@@ -177,12 +177,12 @@ const queryFaultHistory = async () => {
       }
       
       const result = await faultService.queryFaultHistory(params)
-      // 将FaultRecord[]转换为AlarmRecord[]，添加id属性
-      alarmHistoryRecords.value = result.records.map((record, index) => ({
+      // 后端直接返回数组，需要转换为前端需要的格式
+      alarmHistoryRecords.value = result.map((record, index) => ({
         id: index + 1, // 临时生成id
         ...record
       })) || []
-      totalRecords.value = result.total || 0
+      totalRecords.value = result.length || 0
       ElMessage.success('查询成功')
     } catch (error: any) {
       ElMessage.error('查询失败：' + (error.message || '未知错误'))
