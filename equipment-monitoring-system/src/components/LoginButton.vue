@@ -556,4 +556,24 @@ const handleRegister = async (e: Event) => {
 .cursor-pointer {
   cursor: pointer;
 }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .btn {
+    font-size: 0.875rem; /* 减小字体大小 */
+    padding: 0.5rem 1.5rem; /* 减小内边距 */
+    border-radius: 0.6rem; /* 调整圆角 */
+    box-shadow: 0px 0px 40px #1f4c65; /* 减小阴影 */
+  }
+}
+
+/* 小屏幕手机适配 */
+@media (max-width: 480px) {
+  .btn {
+    font-size: 0.8rem; /* 进一步减小字体大小 */
+    padding: 0.4rem 1.2rem; /* 进一步减小内边距 */
+    border-radius: 0.5rem; /* 进一步调整圆角 */
+    box-shadow: 0px 0px 30px #1f4c65; /* 进一步减小阴影 */
+  }
+}
 </style>

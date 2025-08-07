@@ -8,82 +8,91 @@ import * as echarts from 'echarts'
 import { useAuthStore } from '../stores/auth'
 import { faultService } from '../services/fault'
 
-type ShiftType = '甲班' | '乙班' | '丙班'
-type DeviceType = 'cigarette_machine' | 'packing_machine' | 'cartoning_machine'
-type ShiftValue = 'jia' | 'yi' | 'bing'
-type AlarmLevel = 'emergency' | 'important' | 'normal'
-type AlarmStatus = 'processed' | 'pending'
+// 导入组合式函数
+import { useAuth } from '@/composables/useAuth'
+import { useDeviceBinding } from '@/composables/useDeviceBinding'
+import { useCharts } from '@/composables/useCharts'
+import { useFaultAnalysis } from '@/composables/useFaultAnalysis'
+import { useShiftAnalysis } from '@/composables/useShiftAnalysis'
+import { useFaultRecords } from '@/composables/useFaultRecords'
 
-interface MockDataItem {
-  date: string
-  甲班?: number
-  乙班?: number
-  丙班?: number
-  [key: string]: any
-}
+// 初始化认证相关功能
+const { showLoginPrompt, requireAuth, openLoginDialog } = useAuth()
 
-interface DeviceOption {
-  label: string
-  value: string | number
-}
+// 初始化设备绑定相关功能
+const {
+  deviceType,
+  deviceNumber,
+  shift,
+  isDeviceBound,
+  deviceTypes,
+  deviceNumbers,
+  shifts,
+  boundDeviceInfo,
+  currentDeviceParams,
+  deviceStatus,
+  faultName,
+  bindDevice,
+  unbindDevice,
+  getStatusText,
+  getStatusClass,
+  simulateDeviceFault
+} = useDeviceBinding(requireAuth)
 
-interface AlarmRecord {
-  id: number
-  mch_name: string
-  fault_time: string
-  stop_time: string
-  fault_name: string
-  mch_params: Record<string, any>
-  ai_analysis: string
-  class_group: string
-  class_shift: string
-}
+// 初始化图表相关功能
+const {
+  chart1Ref,
+  chart2Ref,
+  chart3Ref,
+  chart4Ref,
+  chart5Ref,
+  chartFilters,
+  isRefreshing,
+  refreshInterval,
+  initCharts,
+  refreshCharts,
+  startAutoRefresh,
+  stopAutoRefresh
+} = useCharts()
 
-interface ChartFilters {
-  dateRange: [Date, Date]
-  shift: string
-}
+// 初始化故障分析相关功能
+const {
+  faultAnalysis,
+  analysisLoading,
+  analyzeFault
+} = useFaultAnalysis(requireAuth, boundDeviceInfo, faultName, deviceStatus)
 
-interface HistoryFilters {
-  dateRange: [Date, Date] | null
-  class_group: string
-  mch_name: string
-}
+// 初始化班次分析相关功能
+const {
+  isAnalyzingShift,
+  shiftAnalysisResult,
+  showAnalysisResult,
+  performShiftAnalysis,
+  closeShiftAnalysisResult
+} = useShiftAnalysis(requireAuth, boundDeviceInfo)
 
-interface ChartDataItem {
-  name: string
-  value: number
-}
+// 初始化故障记录相关功能
+const {
+  faultDashboardTab,
+  historyFilters,
+  alarmHistoryRecords,
+  isLoadingFaultRecords,
+  currentPage,
+  pageSize,
+  totalRecords,
+  showFaultDetailDialog,
+  selectedFaultRecord,
+  filteredHistoryRecords,
+  formatDateTime,
+  queryFaultHistory,
+  openFaultDetail,
+  closeFaultDetail
+} = useFaultRecords(requireAuth)
 
-interface PieDataItem {
-  value: number
-  name: string
-}
+// Tab Management
+const activeTab = ref('monitoring') // 'monitoring', 'fault-dashboard', 'analysis'
 
-const authStore = useAuthStore()
-
-// 登录提示弹窗控制
-const showLoginPrompt = ref(false)
-
-// 登录验证函数
-const requireAuth = (callback: () => void) => {
-  if (!authStore.isLoggedIn) {
-    showLoginPrompt.value = true
-    return
-  }
-  callback()
-}
-
-// 打开登录弹窗的函数
-const openLoginDialog = () => {
-  showLoginPrompt.value = false
-  // 触发LoginButton组件的登录弹窗
-  const loginButton = document.querySelector('.btn') as HTMLElement
-  if (loginButton) {
-    loginButton.click()
-  }
-}
-
+// Markdown配置
 const md: MarkdownIt = new MarkdownIt({
   highlight: function (str: string, lang: string) {
     if (lang && hljs.getLanguage(lang)) {
@@ -97,109 +106,6 @@ const md: MarkdownIt = new MarkdownIt({
   }
 })
 
-// Tab Management
-const activeTab = ref('monitoring') // 'monitoring', 'fault-dashboard', 'analysis'
-
-// Fault Dashboard Sub-tabs
-const faultDashboardTab = ref('data-dashboard') // 'data-dashboard', 'history-records'
-
-// Device Binding
-const deviceType = ref('')
-const deviceNumber = ref('')
-const shift = ref('')
-const isDeviceBound = ref(false)
-const deviceTypes: DeviceOption[] = [
-  { label: '卷接机', value: 'cigarette_machine' },
-  { label: '包装机', value: 'packing_machine' },
-  { label: '封箱机', value: 'cartoning_machine' }
-]
-const deviceNumbers: DeviceOption[] = Array.from({ length: 22 }, (_, i) => ({ label: `${i + 1}#`, value: i + 1 }))
-const shifts: DeviceOption[] = [
-  { label: '甲班', value: 'jia' },
-  { label: '乙班', value: 'yi' },
-  { label: '丙班', value: 'bing' }
-]
-
-// Device Data
-const boundDeviceInfo = ref<any>(null)
-const currentDeviceParams = ref<any>(null)
-const deviceStatus = ref<'running' | 'stopped' | 'fault'>('stopped')
-const faultName = ref('')
-
-// AI Analysis
-const faultAnalysis = ref('')
-const analysisLoading = ref(false)
-
-// Alarm Records (for 故障记录 tab)
-const alarmHistoryRecords = ref<AlarmRecord[]>([])
-const isLoadingFaultRecords = ref(false)
-const currentPage = ref(1)
-const pageSize = ref(10)
-const totalRecords = ref(0)
-
-// 故障记录详情弹窗
-const showFaultDetailDialog = ref(false)
-const selectedFaultRecord = ref<AlarmRecord | null>(null)
-
-// 打开故障记录详情弹窗
-const openFaultDetail = (record: AlarmRecord) => {
-  selectedFaultRecord.value = record
-  showFaultDetailDialog.value = true
-}
-
-// 关闭故障记录详情弹窗
-const closeFaultDetail = () => {
-  showFaultDetailDialog.value = false
-  selectedFaultRecord.value = null
-}
-
-// 格式化时间显示
-const formatDateTime = (dateTimeStr: string) => {
-  if (!dateTimeStr) return ''
-  // 移除时区信息，只保留年月日时分秒
-  return dateTimeStr.replace('T', ' ').substring(0, 19)
-}
-
-// 查询历史故障记录
-const queryFaultHistory = async () => {
-  requireAuth(async () => {
-    isLoadingFaultRecords.value = true
-    try {
-      const params = {
-        start_date: historyFilters.dateRange?.[0] ? historyFilters.dateRange[0].toISOString().split('T')[0] : undefined,
-        end_date: historyFilters.dateRange?.[1] ? historyFilters.dateRange[1].toISOString().split('T')[0] : undefined,
-        class_group: historyFilters.class_group || undefined,
-        mch_name: historyFilters.mch_name || undefined,
-        page: currentPage.value,
-        page_size: pageSize.value,
-        sort_by: 'fault_time',
-        sort_order: 'desc'
-      }
-      
-      const result = await faultService.queryFaultHistory(params)
-      // 后端直接返回数组，需要转换为前端需要的格式
-      alarmHistoryRecords.value = result.map((record, index) => ({
-        id: index + 1, // 临时生成id
-        ...record
-      })) || []
-      totalRecords.value = result.length || 0
-      ElMessage.success('查询成功')
-    } catch (error: any) {
-      ElMessage.error('查询失败：' + (error.message || '未知错误'))
-    } finally {
-      isLoadingFaultRecords.value = false
-    }
-  })
-}
-
-// 组件挂载时加载初始数据
-onMounted(() => {
-  // 如果当前标签页是历史故障记录，则自动加载数据
-  if (activeTab.value === 'fault-dashboard' && faultDashboardTab.value === 'history-records') {
-    queryFaultHistory()
-  }
-})
-
 // 监听标签页变化，自动加载数据
 watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => {
   if (newActiveTab === 'fault-dashboard' && newFaultDashboardTab === 'history-records') {
@@ -210,458 +116,34 @@ watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => 
   }
 })
 
-// Shift Analysis (for 本班分析 tab)
-const isAnalyzingShift = ref(false)
-const shiftAnalysisResult = ref('')
-const showAnalysisResult = ref(false)
-
-// Fault Dashboard - Charts
-const chart1Ref = ref<HTMLElement | null>(null)
-const chart2Ref = ref<HTMLElement | null>(null)
-const chart3Ref = ref<HTMLElement | null>(null)
-let chart1Instance: echarts.ECharts | null = null
-let chart2Instance: echarts.ECharts | null = null
-let chart3Instance: echarts.ECharts | null = null
-
-// Fault Dashboard - Data
-const chartFilters = reactive<ChartFilters>({
-  dateRange: [new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), new Date()],
-  shift: ''
-})
-
-// History Records Filters
-const historyFilters = reactive<HistoryFilters>({
-  dateRange: [new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), new Date()],
-  class_group: '',
-  mch_name: ''
-})
-
-const isRefreshing = ref(false)
-const refreshInterval = ref<number | null>(null)
-
-// --- Functions ---
-
-// Fault Dashboard Functions
-const initCharts = () => {
-  if (chart1Ref.value) {
-    chart1Instance = echarts.init(chart1Ref.value)
-    updateChart1()
-  }
-  if (chart2Ref.value) {
-    chart2Instance = echarts.init(chart2Ref.value)
-    updateChart2()
-  }
-  if (chart3Ref.value) {
-    chart3Instance = echarts.init(chart3Ref.value)
-    updateChart3()
-  }
-}
-
-const updateChart1 = () => {
-  if (!chart1Instance) return
-  
-  // 生成模拟数据
-  const generateMockData = (): MockDataItem[] => {
-    const startDate = new Date(chartFilters.dateRange[0]);
-    const endDate = new Date(chartFilters.dateRange[1]);
-    const data: MockDataItem[] = [];
-    let currentDate = new Date(startDate);
-
-    while (currentDate <= endDate) {
-      const dateStr = currentDate.toISOString().split('T')[0];
-      const item: MockDataItem = { date: dateStr };
-
-      // 如果选择了班组，只生成该班组的数据
-      if (chartFilters.shift) {
-        item[chartFilters.shift] = Math.floor(Math.random() * 6) + 1;
-      } else {
-        // 否则生成所有班组的数据
-        item['甲班'] = Math.floor(Math.random() * 6) + 1;
-        item['乙班'] = Math.floor(Math.random() * 6) + 1;
-        item['丙班'] = Math.floor(Math.random() * 6) + 1;
-      }
-
-      data.push(item);
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    return data;
-  };
-
-  const mockData = generateMockData();
-
-  // 确定要显示的班组
-  const series: any[] = [];
-  const legendData: string[] = [];
-  const colors = ['#4285F4', '#34A853', '#FBBC05'];
-  const shifts: ShiftType[] = chartFilters.shift ? [chartFilters.shift as ShiftType] : ['甲班', '乙班', '丙班'];
-
-  shifts.forEach((shift, index) => {
-    series.push({
-      name: shift,
-      type: 'bar',
-      smooth: true,
-      data: mockData.map(item => item[shift] || 0),
-      itemStyle: { borderRadius: [4, 4, 0, 0], color: colors[index % colors.length] }
-    });
-    legendData.push(shift);
-  });
-
-  const option = {
-    title: { text: '各班组当前设备故障次数统计', left: 'center', textStyle: { fontSize: 16 } },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' }
-    },
-    legend: { data: legendData, top: 40 },
-    toolbox: {
-      feature: {
-        magicType: { type: ['line', 'bar'] },
-        restore: {},
-        saveAsImage: {}
-      }
-    },
-    grid: { top: '25%', right: '3%', left: '3%', bottom: '3%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: mockData.map(item => item.date)
-    },
-    yAxis: {
-      type: 'value',
-      name: '故障次数'
-    },
-    series: series
-  }
-  chart1Instance.setOption(option)
-}
-
-const updateChart2 = () => {
-  if (!chart2Instance) return
-  
-  const mockData: ChartDataItem[] = [
-    { name: '液压系统压力过高', value: 45 },
-    { name: '烟支供应中断', value: 30 },
-    { name: '电机过载', value: 60 },
-    { name: '传感器故障', value: 25 },
-    { name: '温度异常', value: 35 },
-    { name: '润滑不足', value: 40 }
-  ]
-
-  const option = {
-    title: { text: '本班故障停机时长统计', left: 'center', textStyle: { fontSize: 16 } },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' }
-    },
-    toolbox: {
-      feature: {
-        magicType: { type: ['line', 'bar'] },
-        restore: {},
-        saveAsImage: {}
-      }
-    },
-    grid: { top: '20%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: mockData.map(item => item.name),
-      axisLabel: { rotate: 45 }
-    },
-    yAxis: {
-      type: 'value',
-      name: '停机时长(分钟)'
-    },
-    series: [{
-      type: 'bar',
-      smooth: true,
-      data: mockData.map(item => item.value),
-      itemStyle: {
-        borderRadius: [4, 4, 0, 0],
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#61A5FA' },
-          { offset: 1, color: '#316EF8' }
-        ])
-      }
-    }]
-  }
-  chart2Instance.setOption(option)
-}
-
-const updateChart3 = () => {
-  if (!chart3Instance) return
-  
-  const mockData: PieDataItem[] = [
-    { value: 15, name: '液压系统压力过高' },
-    { value: 12, name: '烟支供应中断' },
-    { value: 20, name: '电机过载' },
-    { value: 8, name: '传感器故障' },
-    { value: 10, name: '温度异常' },
-    { value: 5, name: '其他' }
-  ]
-
-  const option = {
-    title: { text: '故障分类统计', left: 'center', textStyle: { fontSize: 16 } },
-    tooltip: {
-      trigger: 'item',
-      formatter: '{a} <br/>{b}: {c} ({d}%)'
-    },
-    legend: {
-      orient: 'horizontal',
-      bottom: 10,
-      left: 'center'
-    },
-    grid: { top: '15%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
-    series: [{
-      name: '故障次数',
-      type: 'pie',
-      radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
-      itemStyle: {
-        borderRadius: 10,
-        borderColor: '#fff',
-        borderWidth: 2
-      },
-      label: {
-        show: false,
-        position: 'center'
-      },
-      emphasis: {
-        label: {
-          show: true,
-          fontSize: 16,
-          fontWeight: 'bold'
-        },
-        itemStyle: {
-          shadowBlur: 10,
-          shadowOffsetX: 0,
-          shadowColor: 'rgba(0, 0, 0, 0.5)'
-        }
-      },
-      labelLine: {
-        show: false
-      },
-      data: mockData,
-      color: ['#4285F4', '#34A853', '#FBBC05', '#EA4335', '#673AB7', '#00BCD4']
-    }]
-  }
-  chart3Instance.setOption(option)
-}
-
-const refreshCharts = () => {
-  isRefreshing.value = true
-  setTimeout(() => {
-    updateChart1()
-    updateChart2()
-    updateChart3()
-    isRefreshing.value = false
-    ElMessage.success('图表数据已刷新')
-  }, 1000)
-}
-
-const startAutoRefresh = () => {
-  if (refreshInterval.value) {
-    clearInterval(refreshInterval.value)
-  }
-  refreshInterval.value = setInterval(() => {
-    if (activeTab.value === 'fault-dashboard') {
-      refreshCharts()
-    }
-  }, 3 * 60 * 1000) // 3分钟
-}
-
-const stopAutoRefresh = () => {
-  if (refreshInterval.value) {
-    clearInterval(refreshInterval.value)
-    refreshInterval.value = null
-  }
-}
-
-// Computed for filtered history records (data is already filtered by API)
-const filteredHistoryRecords = computed(() => {
-  return alarmHistoryRecords.value
-})
-
-const bindDevice = () => {
-  requireAuth(() => {
-    if (!deviceType.value || !deviceNumber.value || !shift.value) {
-      ElMessage.warning('请填写完整的设备信息')
-      return
-    }
-    const typeLabel = deviceTypes.find(t => t.value === deviceType.value)?.label || ''
-    boundDeviceInfo.value = {
-      type: typeLabel,
-      number: deviceNumber.value,
-      shift: shift.value,
-      id: `DEV-${deviceType.value}-${deviceNumber.value}`
-    }
-    // Simulate fetching initial device status and params
-    deviceStatus.value = 'running'
-    currentDeviceParams.value = {
-      temperature: (Math.random() * 30 + 50).toFixed(1),
-      pressure: (Math.random() * 2 + 1).toFixed(1),
-      speed: Math.floor(Math.random() * 500 + 1000),
-      runtime: '0h 5m'
-    }
-    isDeviceBound.value = true
-    ElMessage.success('设备绑定成功')
-  })
-}
-
-const unbindDevice = () => {
-  requireAuth(() => {
-    ElMessageBox.confirm('确定要解绑当前设备吗？解绑后将停止实时监控。', '解绑确认', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-      customClass: 'unbind-confirm'
-    })
-    .then(() => {
-      isDeviceBound.value = false
-      boundDeviceInfo.value = null
-      currentDeviceParams.value = null
-      deviceStatus.value = 'stopped'
-      faultAnalysis.value = ''
-      ElMessage.info('设备已解绑')
-    })
-    .catch(() => {
-      ElMessage.info('已取消解绑')
-    })
-  })
-}
-
-const getStatusText = (status: string) => {
-  const statusMap: Record<string, string> = {
-    running: '运行中',
-    stopped: '已停机',
-    fault: '故障'
-  }
-  return statusMap[status] || status
-}
-
-const getStatusClass = (status: string) => {
-  return `status-${status}`
-}
-
-
-
-const simulateDeviceFault = () => {
-  requireAuth(() => {
-    if (deviceStatus.value === 'running') {
-      deviceStatus.value = 'fault'
-      faultName.value = '传感器通讯中断'
-      ElMessage.error(`设备发生故障: ${faultName.value}`)
-      // Auto-trigger AI analysis on fault
-      analyzeFault()
-    } else if (deviceStatus.value === 'fault') {
-      deviceStatus.value = 'running'
-      faultName.value = ''
-      faultAnalysis.value = '' // Clear previous analysis
-      ElMessage.success('设备已恢复正常')
-    }
-  })
-}
-
-const analyzeFault = async () => {
-  requireAuth(async () => {
-    if (deviceStatus.value !== 'fault') {
-      ElMessage.warning('当前设备无故障，无需分析')
-      return
-    }
-    analysisLoading.value = true
-    faultAnalysis.value = '' // Clear previous result
-
-    try {
-      // Simulate AI API call
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      faultAnalysis.value = `
-## 故障分析报告
-
-### 设备信息
-- **设备**: ${boundDeviceInfo.value.type}-${boundDeviceInfo.value.number}#
-- **故障**: ${faultName.value}
-- **班次**: ${boundDeviceInfo.value.shift}
-
-### 可能原因
-1. 传感器线路松动或损坏。
-2. 通讯接口模块故障。
-3. 电磁干扰导致信号中断。
-
-### 建议处理步骤
-1. **检查线路**: 检查传感器到控制单元的连接线缆是否牢固。
-2. **重启设备**: 尝试重启设备控制系统，看是否能恢复通讯。
-3. **更换模块**: 若问题依旧，考虑更换通讯接口模块。
-
-### 预防措施
-- 定期检查线路连接情况。
-- 加强设备接地，减少电磁干扰。
-`
-      ElMessage.success('AI分析完成')
-    } catch (error) {
-      ElMessage.error('AI分析失败')
-    } finally {
-      analysisLoading.value = false
-    }
-  })
-}
-
-const performShiftAnalysis = async () => {
-  requireAuth(async () => {
-    isAnalyzingShift.value = true
-    showAnalysisResult.value = false
-    shiftAnalysisResult.value = ''
-
-    try {
-      // Simulate AI analysis for the shift
-      await new Promise(resolve => setTimeout(resolve, 5000)) // Longer simulation
-      shiftAnalysisResult.value = `
-## 本班次生产分析报告
-
-### 班次概览
-- **班次**: ${boundDeviceInfo.value?.shift || 'N/A'}
-- **分析时间**: ${new Date().toLocaleString()}
-
-### 运行总结
-本班次设备整体运行平稳，共发生一次 minor 故障，已快速处理，未对生产造成重大影响。设备平均运行参数在正常范围内。
-
-### 关键指标
-- **总运行时间**: 7h 45m
-- **平均温度**: 62.5°C
-- **平均压力**: 1.8 MPa
-- **平均转速**: 1180 rpm
-- **故障次数**: 1次 (传感器通讯中断)
-
-### 故障分析
-本次发生的"传感器通讯中断"故障，原因为线路瞬时接触不良。建议在后续维护中重点关注此类连接点的稳定性。
-
-### 优化建议
-1. **预防性维护**: 建议增加对关键传感器连接点的检查频率。
-2. **操作培训**: 加强操作人员对设备初期故障现象的识别能力。
-3. **备件管理**: 确保常用传感器和通讯模块有充足备件。
-`
-      ElMessage.success('本班分析完成')
-    } catch (error) {
-      ElMessage.error('本班分析失败')
-    } finally {
-      isAnalyzingShift.value = false
-      showAnalysisResult.value = true
-    }
-  })
-}
-
-const closeShiftAnalysisResult = () => {
-  showAnalysisResult.value = false
-  shiftAnalysisResult.value = ''
-  isAnalyzingShift.value = false
-}
-
 // 监听登录状态变化，显示登录成功提示
+const authStore = useAuthStore()
 watch(() => authStore.isLoggedIn, (newValue, oldValue) => {
   if (newValue === true && oldValue === false) {
     ElMessage.success('登录成功！欢迎使用设备监控系统')
   }
 }, { immediate: false })
 
-// Simulate real-time data updates
+// 监听标签页变化，管理图表自动刷新
+watch(activeTab, (newTab) => {
+  if (newTab === 'fault-dashboard') {
+    setTimeout(() => {
+      initCharts()
+      startAutoRefresh()
+    }, 100)
+  } else {
+    stopAutoRefresh()
+  }
+})
+
+// 组件挂载时的初始化
 onMounted(() => {
+  // 如果当前标签页是历史故障记录，则自动加载数据
+  if (activeTab.value === 'fault-dashboard' && faultDashboardTab.value === 'history-records') {
+    queryFaultHistory()
+  }
+
+  // 模拟实时数据更新
   if (isDeviceBound.value && deviceStatus.value === 'running') {
     const interval = setInterval(() => {
       if (currentDeviceParams.value) {
@@ -674,22 +156,9 @@ onMounted(() => {
   }
 })
 
-watch(activeTab, (newTab) => {
-  if (newTab === 'fault-dashboard') {
-    setTimeout(() => {
-      initCharts()
-      startAutoRefresh()
-    }, 100)
-  } else {
-    stopAutoRefresh()
-  }
-})
-
+// 组件卸载时的清理
 onUnmounted(() => {
   stopAutoRefresh()
-  if (chart1Instance) chart1Instance.dispose()
-  if (chart2Instance) chart2Instance.dispose()
-  if (chart3Instance) chart3Instance.dispose()
 })
 </script>
 
@@ -880,6 +349,14 @@ onUnmounted(() => {
                 <div class="chart-row">
                   <div class="chart-item full-width">
                     <div ref="chart3Ref" class="chart"></div>
+                  </div>
+                </div>
+                <div class="chart-row">
+                  <div class="chart-item">
+                    <div ref="chart4Ref" class="chart"></div>
+                  </div>
+                  <div class="chart-item">
+                    <div ref="chart5Ref" class="chart"></div>
                   </div>
                 </div>
               </div>
@@ -1855,21 +1332,22 @@ onUnmounted(() => {
     /* 图表容器 */
     .chart-row {
       flex-direction: column;
-      gap: 15px;
-      margin-bottom: 15px;
+      gap: 20px;
+      margin-bottom: 20px;
     }
     
     .chart-item {
-      margin-bottom: 15px;
-      padding: 10px;
+      margin-bottom: 10px;
+      padding: 12px;
+      min-height: 280px;
     }
 
     .chart {
-      height: 250px;
+      height: 260px;
     }
 
     .charts-container {
-      padding: 15px;
+      padding: 12px;
     }
 
     /* 历史记录表格 */
@@ -1969,54 +1447,90 @@ onUnmounted(() => {
   }
 
   /* 小屏幕手机适配 */
-  @media (max-width: 480px) {
-    .monitoring-view {
-      padding: 8px;
-    }
-
-    .tab-button {
-      padding: 10px 12px;
-      font-size: 13px;
-    }
-
-    .tab-content {
-      padding: 12px;
-    }
-
-    .status-display h3 {
-      font-size: 14px;
-    }
-
-    .status-indicator {
-      padding: 8px 12px;
-      font-size: 12px;
-    }
-
-    .chart {
-      height: 200px;
-    }
-
-    .history-records {
-      padding: 12px;
-    }
-
-    .filters {
-      padding: 12px;
-    }
-
-    .el-table {
-      font-size: 11px;
-    }
-
-    .device-binding-form h2 {
-      font-size: 18px;
-    }
-
-    .analyze-button {
-      padding: 12px 30px;
-      font-size: 14px;
-    }
+@media (max-width: 480px) {
+  .monitoring-view {
+    padding: 8px;
   }
+
+  .tab-navigation {
+    gap: 3px;
+  }
+
+  .tab-button {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .tab-content {
+    padding: 10px;
+  }
+
+  .monitoring-layout {
+    gap: 10px;
+  }
+
+  .status-display h3 {
+    font-size: 14px;
+  }
+
+  .status-indicator {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .params-grid {
+    gap: 8px;
+  }
+
+  .param-item {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .chart-row {
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .chart-item {
+    padding: 8px;
+    min-height: 240px;
+  }
+
+  .chart {
+    height: 220px;
+  }
+
+  .charts-container {
+    padding: 8px;
+  }
+
+  .history-records {
+    padding: 10px;
+  }
+
+  .filters {
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  .el-table {
+    font-size: 11px;
+  }
+
+  .el-table .cell {
+    padding: 4px 2px;
+  }
+
+  .device-binding-form h2 {
+    font-size: 18px;
+  }
+
+  .analyze-button {
+    padding: 12px 30px;
+    font-size: 14px;
+  }
+}
 
   /* 横屏模式适配 */
   @media (max-width: 768px) and (orientation: landscape) {

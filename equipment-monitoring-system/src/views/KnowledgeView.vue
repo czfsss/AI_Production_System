@@ -160,8 +160,15 @@ const switchAgent = (agent: any) => {
 
   .iframe-container {
     height: 500px;
+    min-height: 500px;
     border-radius: 8px;
     margin: 0 8px 8px 8px;
+    overflow: hidden;
+  }
+  
+  .iframe-container iframe {
+    min-height: 500px;
+    height: 100%;
   }
 }
 

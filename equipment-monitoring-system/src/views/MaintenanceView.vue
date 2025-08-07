@@ -206,10 +206,14 @@ li {
   .iframe-container {
     padding: 3px;
     border-radius: 12px;
+    height: 100%;
+    min-height: 500px;
+    overflow: hidden;
   }
 
   .iframe-container iframe {
     min-height: 500px;
+    height: 100%;
   }
 
   .placeholder-content {
