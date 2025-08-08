@@ -89,8 +89,25 @@ const {
   closeFaultDetail
 } = useFaultRecords(requireAuth)
 
-// Tab Management
-const activeTab = ref('monitoring') // 'monitoring', 'fault-dashboard', 'analysis'
+// Tab Management - 从localStorage恢复状态或使用默认值
+const getSavedTab = () => {
+  const saved = localStorage.getItem('monitoringActiveTab')
+  return saved || 'monitoring'
+}
+
+const activeTab = ref(getSavedTab())
+
+// 监听标签页变化，保存到localStorage
+watch(activeTab, (newTab) => {
+  localStorage.setItem('monitoringActiveTab', newTab)
+})
+
+// 监听故障看板内部标签页变化，也保存到localStorage
+watch(faultDashboardTab, (newTab) => {
+  if (activeTab.value === 'fault-dashboard') {
+    localStorage.setItem('monitoringFaultDashboardTab', newTab)
+  }
+})
 
 // Markdown配置
 const md: MarkdownIt = new MarkdownIt({
@@ -107,12 +124,22 @@ const md: MarkdownIt = new MarkdownIt({
 })
 
 // 监听标签页变化，自动加载数据
+// 监听标签页变化，自动加载数据
 watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => {
   if (newActiveTab === 'fault-dashboard' && newFaultDashboardTab === 'history-records') {
     // 只有当数据为空时才自动加载，避免重复请求
     if (alarmHistoryRecords.value.length === 0) {
       queryFaultHistory()
     }
+  }
+  
+  // 当切换到数据看板时，自动刷新图表数据
+  if (newActiveTab === 'fault-dashboard' && newFaultDashboardTab === 'data-dashboard') {
+    refreshCharts()
+    // 自动刷新网页以解决图表挤压bug
+    setTimeout(() => {
+      window.location.reload()
+    }, 50)
   }
 })
 
@@ -136,25 +163,39 @@ watch(activeTab, (newTab) => {
   }
 })
 
-// 组件挂载时的初始化
-onMounted(() => {
-  // 如果当前标签页是历史故障记录，则自动加载数据
-  if (activeTab.value === 'fault-dashboard' && faultDashboardTab.value === 'history-records') {
-    queryFaultHistory()
-  }
+  // 组件挂载时的初始化
+  onMounted(() => {
+    // 恢复故障看板内部标签页状态
+    const savedFaultDashboardTab = localStorage.getItem('monitoringFaultDashboardTab')
+    if (savedFaultDashboardTab && activeTab.value === 'fault-dashboard') {
+      faultDashboardTab.value = savedFaultDashboardTab
+    }
+    
+    // 如果当前标签页是故障看板，则初始化图表
+    if (activeTab.value === 'fault-dashboard') {
+      setTimeout(() => {
+        initCharts()
+        startAutoRefresh()
+      }, 100)
+    }
+    
+    // 如果当前标签页是历史故障记录，则自动加载数据
+    if (activeTab.value === 'fault-dashboard' && faultDashboardTab.value === 'history-records') {
+      queryFaultHistory()
+    }
 
-  // 模拟实时数据更新
-  if (isDeviceBound.value && deviceStatus.value === 'running') {
-    const interval = setInterval(() => {
-      if (currentDeviceParams.value) {
-        currentDeviceParams.value.temperature = (Math.random() * 5 + 60).toFixed(1)
-        currentDeviceParams.value.pressure = (Math.random() * 0.5 + 1.5).toFixed(1)
-        currentDeviceParams.value.speed = Math.floor(Math.random() * 100 + 1150)
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }
-})
+    // 模拟实时数据更新
+    if (isDeviceBound.value && deviceStatus.value === 'running') {
+      const interval = setInterval(() => {
+        if (currentDeviceParams.value) {
+          currentDeviceParams.value.temperature = (Math.random() * 5 + 60).toFixed(1)
+          currentDeviceParams.value.pressure = (Math.random() * 0.5 + 1.5).toFixed(1)
+          currentDeviceParams.value.speed = Math.floor(Math.random() * 100 + 1150)
+        }
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  })
 
 // 组件卸载时的清理
 onUnmounted(() => {

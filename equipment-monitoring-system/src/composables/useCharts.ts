@@ -71,6 +71,29 @@ export function useCharts() {
 
   // 初始化图表
   const initCharts = () => {
+    // 销毁已存在的图表实例
+    if (chart1Instance) {
+      chart1Instance.dispose()
+      chart1Instance = null
+    }
+    if (chart2Instance) {
+      chart2Instance.dispose()
+      chart2Instance = null
+    }
+    if (chart3Instance) {
+      chart3Instance.dispose()
+      chart3Instance = null
+    }
+    if (chart4Instance) {
+      chart4Instance.dispose()
+      chart4Instance = null
+    }
+    if (chart5Instance) {
+      chart5Instance.dispose()
+      chart5Instance = null
+    }
+    
+    // 重新初始化图表实例
     if (chart1Ref.value) {
       chart1Instance = echarts.init(chart1Ref.value)
       updateChart1()
@@ -92,6 +115,30 @@ export function useCharts() {
       updateChart5()
     }
   }
+
+  // 重新调整图表大小
+  const resizeCharts = () => {
+    if (chart1Instance) chart1Instance.resize()
+    if (chart2Instance) chart2Instance.resize()
+    if (chart3Instance) chart3Instance.resize()
+    if (chart4Instance) chart4Instance.resize()
+    if (chart5Instance) chart5Instance.resize()
+  }
+
+  // 组件挂载时添加窗口大小改变监听
+  onMounted(() => {
+    window.addEventListener('resize', resizeCharts)
+  })
+
+  // 组件卸载时清理图表实例和事件监听
+  onUnmounted(() => {
+    window.removeEventListener('resize', resizeCharts)
+    if (chart1Instance) chart1Instance.dispose()
+    if (chart2Instance) chart2Instance.dispose()
+    if (chart3Instance) chart3Instance.dispose()
+    if (chart4Instance) chart4Instance.dispose()
+    if (chart5Instance) chart5Instance.dispose()
+  })
 
   // 更新图表1 - 各班组当前设备故障次数统计
   const updateChart1 = () => {
