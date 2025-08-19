@@ -97,6 +97,13 @@ const getSavedTab = () => {
 
 const activeTab = ref(getSavedTab())
 
+// 移动端标签页展开状态
+const tabsExpanded = ref(false)
+
+const toggleTabs = () => {
+  tabsExpanded.value = !tabsExpanded.value
+}
+
 // 监听标签页变化，保存到localStorage
 watch(activeTab, (newTab) => {
   localStorage.setItem('monitoringActiveTab', newTab)
@@ -206,25 +213,33 @@ onUnmounted(() => {
 <template>
   <div class="monitoring-view">
     <!-- Tab Navigation -->
-    <div class="tab-navigation">
-      <button 
-        :class="['tab-button', { active: activeTab === 'monitoring' }]"
-        @click="activeTab = 'monitoring'"
-      >
-        设备状态监控
-      </button>
-      <button 
-        :class="['tab-button', { active: activeTab === 'fault-dashboard' }]"
-        @click="activeTab = 'fault-dashboard'"
-      >
-        故障看板
-      </button>
-      <button 
-        :class="['tab-button', { active: activeTab === 'analysis' }]"
-        @click="activeTab = 'analysis'"
-      >
-        本班分析
-      </button>
+    <div class="tab-navigation-container">
+      <!-- 移动端展开按钮 -->
+      <div class="tabs-expand-button" @click="toggleTabs">
+        <el-icon><component :is="tabsExpanded ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+        <span>{{ tabsExpanded ? '收起' : '展开' }}</span>
+      </div>
+      
+      <div class="tab-navigation" :class="{ expanded: tabsExpanded }">
+        <button 
+          :class="['tab-button', { active: activeTab === 'monitoring' }]"
+          @click="activeTab = 'monitoring'"
+        >
+          设备状态监控
+        </button>
+        <button 
+          :class="['tab-button', { active: activeTab === 'fault-dashboard' }]"
+          @click="activeTab = 'fault-dashboard'"
+        >
+          故障看板
+        </button>
+        <button 
+          :class="['tab-button', { active: activeTab === 'analysis' }]"
+          @click="activeTab = 'analysis'"
+        >
+          本班分析
+        </button>
+      </div>
     </div>
 
     <!-- Tab Content -->
@@ -804,6 +819,36 @@ onUnmounted(() => {
   }
 }
 
+/* 标签页导航容器 */
+.tab-navigation-container {
+  position: relative;
+  z-index: 50;
+}
+
+/* 移动端展开按钮 */
+.tabs-expand-button {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #409eff;
+  transition: all 0.3s ease;
+}
+
+.tabs-expand-button:hover {
+  background: #f5f7fa;
+  border-color: #c0c4cc;
+}
+
+.tabs-expand-button .el-icon {
+  font-size: 16px;
+}
+
 .tab-button {
   flex: 1;
   padding: 15px 20px;
@@ -1302,13 +1347,65 @@ onUnmounted(() => {
     /* 主要布局 */
     .monitoring-view {
       padding: 10px;
-      min-height: auto;
+      height: 100vh;
+      min-height: 100%;
+      box-sizing: border-box;
     }
 
     /* 标签页导航 */
     .tab-navigation {
       flex-direction: column;
       gap: 5px;
+      display: none; /* 默认隐藏 */
+    }
+
+    .tab-navigation.expanded {
+      display: flex; /* 展开时显示 */
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: #fff;
+      border: 1px solid #e4e7ed;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      margin-top: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    /* 浮动菜单中的按钮样式优化 */
+    .tab-navigation.expanded .tab-button {
+      border-radius: 0;
+      border-bottom: 1px solid #f0f2f5;
+      margin: 0;
+    }
+
+    .tab-navigation.expanded .tab-button:last-child {
+      border-bottom: none;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .tab-navigation.expanded .tab-button:first-child {
+      border-radius: 8px 8px 0 0;
+    }
+
+    /* 显示展开按钮 */
+    .tabs-expand-button {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 0; /* 移除底部边距，因为现在是浮动布局 */
+    }
+
+    /* 浮动菜单容器调整 */
+    .tab-navigation-container {
+      margin-bottom: 0; /* 移除底部边距 */
+    }
+
+    /* 确保浮动菜单不影响其他内容 */
+    .tab-content {    
+      margin-top: 0; /* 移除顶部边距 */
     }
 
     .tab-button {

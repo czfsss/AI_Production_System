@@ -162,9 +162,14 @@ const navigateTo = (moduleKey: string) => {
     gap: 10px;
   }
 
+  .hamburger-menu {
+    order: -1; /* 将汉堡菜单放在最左边 */
+    margin-right: 10px;
+  }
+
   .logo-section {
     flex: 1;
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .logo-section h1 {

@@ -17,7 +17,7 @@ const agents = [
   {
     id: 'safety',
     name: '安全问答',
-    src: 'http://10.43.32.231:1130/chatbot/safety'
+    src: 'http://10.43.32.231:1129/chat/share?shared_id=e90b5844729b11f0b4b91e19e3a98b8c&from=chat&auth=c1ZDFlMTk0MjE4ZTExZjBhNmU4ZGEzOG'
   }
 ]
 
@@ -51,8 +51,8 @@ const switchAgent = (agent: any) => {
   display: flex;
   height: calc(100vh - 64px); /* 减去顶部导航栏高度 */
   width: 100%;
-  box-sizing: border-box;
-  padding-bottom: 16px;
+  /* box-sizing: border-box; */
+  /* padding-bottom: 16px; */
 }
 
 .sidebar {
@@ -241,6 +241,7 @@ const switchAgent = (agent: any) => {
 @media (max-width: 768px) and (orientation: landscape) {
   .knowledge-container {
     flex-direction: row;
+    width: 100%;
     height: calc(100vh - 50px);
   }
 
