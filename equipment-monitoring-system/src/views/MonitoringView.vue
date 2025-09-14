@@ -1,12 +1,18 @@
-<script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+  <script setup lang="ts">
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { 
+  VideoPlay, 
+  VideoPause, 
+  Warning, 
+  Loading, 
+  Clock, 
+  Check
+} from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
-import * as echarts from 'echarts'
 import { useAuthStore } from '../stores/auth'
-import { faultService } from '../services/fault'
 
 // 导入组合式函数
 import { useAuth } from '@/composables/useAuth'
@@ -59,6 +65,8 @@ const {
 const {
   faultAnalysis,
   analysisLoading,
+  isStreaming,
+  streamingProgress,
   analyzeFault
 } = useFaultAnalysis(requireAuth, boundDeviceInfo, faultName, deviceStatus)
 
@@ -118,13 +126,17 @@ watch(faultDashboardTab, (newTab) => {
 
 // Markdown配置
 const md: MarkdownIt = new MarkdownIt({
+  html: true,        // 允许HTML标签
+  breaks: true,      // 自动转换换行
+  linkify: true,     // 自动识别链接
+  typographer: true, // 启用智能引号和符号替换
   highlight: function (str: string, lang: string) {
     if (lang && hljs.getLanguage(lang)) {
       try {
         return '<pre class="hljs"><code>' +
                hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
                '</code></pre>'
-      } catch (__) {}
+      } catch {}
     }
     return '<pre class="hljs"><code>' + MarkdownIt.prototype.utils.escapeHtml(str) + '</code></pre>'
   }
@@ -143,10 +155,6 @@ watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => 
   // 当切换到数据看板时，自动刷新图表数据
   if (newActiveTab === 'fault-dashboard' && newFaultDashboardTab === 'data-dashboard') {
     refreshCharts()
-    // 自动刷新网页以解决图表挤压bug
-    setTimeout(() => {
-      window.location.reload()
-    }, 50)
   }
 })
 
@@ -198,6 +206,19 @@ watch(activeTab, (newTab) => {
           currentDeviceParams.value.temperature = (Math.random() * 5 + 60).toFixed(1)
           currentDeviceParams.value.pressure = (Math.random() * 0.5 + 1.5).toFixed(1)
           currentDeviceParams.value.speed = Math.floor(Math.random() * 100 + 1150)
+          currentDeviceParams.value.humidity = (Math.random() * 5 + 50).toFixed(1)
+          currentDeviceParams.value.vibration = (Math.random() * 0.5 + 0.8).toFixed(2)
+          currentDeviceParams.value.current = (Math.random() * 2 + 12).toFixed(1)
+          currentDeviceParams.value.voltage = (Math.random() * 10 + 390).toFixed(0)
+          currentDeviceParams.value.power = (Math.random() * 3 + 28).toFixed(1)
+          currentDeviceParams.value.flow = (Math.random() * 2 + 17).toFixed(1)
+          currentDeviceParams.value.oilTemp = (Math.random() * 3 + 40).toFixed(1)
+          currentDeviceParams.value.oilPressure = (Math.random() * 0.3 + 2.8).toFixed(1)
+          currentDeviceParams.value.throughput = Math.floor(Math.random() * 50 + 850)
+          currentDeviceParams.value.energy = (Math.random() * 10 + 120).toFixed(1)
+          currentDeviceParams.value.efficiency = (Math.random() * 3 + 88).toFixed(1)
+          // 保存更新后的参数到localStorage
+          localStorage.setItem('currentDeviceParams', JSON.stringify(currentDeviceParams.value))
         }
       }, 5000)
       return () => clearInterval(interval)
@@ -289,23 +310,56 @@ onUnmounted(() => {
           <!-- Left Column -->
           <div class="left-column">
             <!-- Current Device Status -->
-            <div class="card device-status-card">
+            <div :class="['card', 'device-status-card', `status-${deviceStatus}`]">
               <div class="card-header">
                 <h2 class="card-title">当前设备监控状态</h2>
                 <el-button type="danger" @click="unbindDevice" size="small">解绑设备</el-button>
               </div>
-              <div class="status-display">
-                <h3>{{ boundDeviceInfo.type }} - {{ boundDeviceInfo.number }}#</h3>
-                <div :class="['status-indicator', deviceStatus]">
-                  <el-icon v-if="deviceStatus === 'running'"><VideoPlay /></el-icon>
-                  <el-icon v-else-if="deviceStatus === 'stopped'"><VideoPause /></el-icon>
-                  <el-icon v-else><Warning /></el-icon>
-                  <span>{{ getStatusText(deviceStatus) }}</span>
-                  <span v-if="deviceStatus === 'fault'" class="fault-name-emphasis">{{ faultName }}</span>
+              <div class="enhanced-status-display">
+                <div class="device-info">
+                  <h3 class="device-name">{{ boundDeviceInfo.type }} - {{ boundDeviceInfo.number }}#</h3>
+                  <div class="shift-info">
+                    <el-icon><Clock /></el-icon>
+                    <span>班次: {{ shifts.find(s => s.value === boundDeviceInfo.shift)?.label }}</span>
+                  </div>
                 </div>
-                <p>班次: {{ shifts.find(s => s.value === boundDeviceInfo.shift)?.label }}</p>
-                <el-button v-if="deviceStatus === 'running'" @click="simulateDeviceFault" type="warning" size="small">模拟故障</el-button>
-                <el-button v-if="deviceStatus === 'fault'" @click="simulateDeviceFault" type="success" size="small">模拟恢复</el-button>
+                
+                <div class="status-center">
+                  <div :class="['enhanced-status-indicator', deviceStatus]">
+                    <div class="status-icon-wrapper">
+                      <el-icon v-if="deviceStatus === 'running'" class="status-icon"><VideoPlay /></el-icon>
+                      <el-icon v-else-if="deviceStatus === 'stopped'" class="status-icon"><VideoPause /></el-icon>
+                      <el-icon v-else class="status-icon"><Warning /></el-icon>
+                    </div>
+                    <div class="status-content">
+                      <span class="status-text">{{ getStatusText(deviceStatus) }}</span>
+                      <span v-if="deviceStatus === 'fault'" class="fault-name-emphasis">{{ faultName }}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="action-buttons">
+                  <el-button 
+                    v-if="deviceStatus === 'running'" 
+                    @click="simulateDeviceFault(analyzeFault)" 
+                    type="warning" 
+                    size="default"
+                    class="action-btn"
+                  >
+                    <el-icon><Warning /></el-icon>
+                    模拟故障
+                  </el-button>
+                  <el-button 
+                    v-if="deviceStatus === 'fault'" 
+                    @click="simulateDeviceFault(analyzeFault)" 
+                    type="success" 
+                    size="default"
+                    class="action-btn"
+                  >
+                    <el-icon><Check /></el-icon>
+                    模拟恢复
+                  </el-button>
+                </div>
               </div>
             </div>
 
@@ -316,24 +370,68 @@ onUnmounted(() => {
               </div>
               <div v-if="currentDeviceParams" class="params-grid">
                 <div class="param-item">
-                  <span class="param-label">温度</span>
-                  <span class="param-value">{{ currentDeviceParams.temperature }}°C</span>
+                  <div class="param-label">温度</div>
+                  <div class="param-value">{{ currentDeviceParams.temperature }}°C</div>
                 </div>
                 <div class="param-item">
-                  <span class="param-label">压力</span>
-                  <span class="param-value">{{ currentDeviceParams.pressure }} MPa</span>
+                  <div class="param-label">压力</div>
+                  <div class="param-value">{{ currentDeviceParams.pressure }} MPa</div>
                 </div>
                 <div class="param-item">
-                  <span class="param-label">转速</span>
-                  <span class="param-value">{{ currentDeviceParams.speed }} rpm</span>
+                  <div class="param-label">转速</div>
+                  <div class="param-value">{{ currentDeviceParams.speed }} rpm</div>
                 </div>
                 <div class="param-item">
-                  <span class="param-label">运行时间</span>
-                  <span class="param-value">{{ currentDeviceParams.runtime }}</span>
+                  <div class="param-label">运行时间</div>
+                  <div class="param-value">{{ currentDeviceParams.runtime }}</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">湿度</div>
+                  <div class="param-value">{{ currentDeviceParams.humidity }}%</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">振动</div>
+                  <div class="param-value">{{ currentDeviceParams.vibration }} mm/s</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">电流</div>
+                  <div class="param-value">{{ currentDeviceParams.current }} A</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">电压</div>
+                  <div class="param-value">{{ currentDeviceParams.voltage }} V</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">功率</div>
+                  <div class="param-value">{{ currentDeviceParams.power }} kW</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">流量</div>
+                  <div class="param-value">{{ currentDeviceParams.flow }} L/min</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">润滑油温</div>
+                  <div class="param-value">{{ currentDeviceParams.oilTemp }}°C</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">润滑油压</div>
+                  <div class="param-value">{{ currentDeviceParams.oilPressure }} bar</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">处理量</div>
+                  <div class="param-value">{{ currentDeviceParams.throughput }} 件/h</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">能耗</div>
+                  <div class="param-value">{{ currentDeviceParams.energy }} kWh</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">效率</div>
+                  <div class="param-value">{{ currentDeviceParams.efficiency }}%</div>
                 </div>
               </div>
               <div v-else class="no-data">
-                暂无参数数据
+                <!-- 暂无数据的样式由CSS控制 -->
               </div>
             </div>
           </div>
@@ -343,18 +441,27 @@ onUnmounted(() => {
             <div class="card ai-analysis-card">
               <div class="card-header">
                 <h2 class="card-title">AI 故障分析</h2>
+                <div v-if="isStreaming" class="streaming-indicator">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  <span>正在流式接收... (第{{streamingProgress}}条)</span>
+                </div>
               </div>
-              <div v-if="deviceStatus !== 'fault'" class="no-fault-message">
-                设备运行正常，无故障信息。
-              </div>
-              <div v-else-if="analysisLoading" class="analysis-loading">
-                <el-icon class="is-loading"><Loading /></el-icon>
-                <p>AI正在分析中，请稍候...</p>
-              </div>
-              <div v-else-if="faultAnalysis" class="markdown-content" v-html="md.render(faultAnalysis)"></div>
-              <div v-else class="prompt-analysis">
-                 <p>设备发生故障，点击下方按钮开始AI分析。</p>
-                 <el-button type="primary" @click="analyzeFault" :loading="analysisLoading">开始AI分析</el-button>
+              <div class="ai-analysis-content">
+                <div v-if="deviceStatus !== 'fault'" class="no-fault-message">
+                  设备运行正常，无故障信息。
+                </div>
+                <div v-else-if="analysisLoading" class="analysis-loading">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  <p>AI正在分析中，请稍候...</p>
+                </div>
+                <div v-else-if="faultAnalysis" class="analysis-content-wrapper">
+                  <div class="markdown-content analysis-result" v-html="md.render(faultAnalysis)"></div>
+                  <div v-if="isStreaming" class="streaming-cursor">|</div>
+                </div>
+                <div v-else class="prompt-analysis">
+                   <p>设备发生故障，点击下方按钮开始AI分析。</p>
+                   <el-button type="primary" @click="analyzeFault" :loading="analysisLoading">开始AI分析</el-button>
+                </div>
               </div>
             </div>
           </div>
@@ -882,10 +989,15 @@ onUnmounted(() => {
 
 .card {
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   padding: 20px;
   margin-bottom: 20px;
+  transition: all 0.3s ease;
+}
+
+.ai-analysis-card {
+  flex-grow: 1;
 }
 
 .card-header {
@@ -914,12 +1026,559 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0; /* 防止flex容器被内容撤开 */
 }
 
-.device-status-card, .device-params-card, .ai-analysis-card {
-  flex-grow: 1;
+/* 设备参数卡片样式 */
+.device-params-card {
+  background: linear-gradient(135deg, #f8fbff 0%, #f0f8ff 100%);
+  border: 2px solid #e1ecf4;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
 }
 
+.device-params-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #409eff, #36a3f7, #409eff);
+  background-size: 200% 100%;
+  animation: params-gradient 3s ease infinite;
+}
+
+@keyframes params-gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.device-params-card:hover {
+  box-shadow: 0 8px 25px rgba(64, 158, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+/* 设备状态卡片增强样式 */
+.device-status-card {
+  position: relative;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+/* 根据设备状态改变背景色 */
+.device-status-card.status-running {
+  background: linear-gradient(135deg, #f0f9f0 0%, #e8f5e8 100%);
+  border: 2px solid #67c23a;
+  box-shadow: 0 4px 12px rgba(103, 194, 58, 0.2);
+}
+
+.device-status-card.status-stopped {
+  background: linear-gradient(135deg, #f5f5f5 0%, #ebebeb 100%);
+  border: 2px solid #909399;
+  box-shadow: 0 4px 12px rgba(144, 147, 153, 0.2);
+}
+
+.device-status-card.status-fault {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  border: 3px solid #e53935;
+  box-shadow: 0 6px 20px rgba(229, 57, 53, 0.4);
+  animation: fault-pulse 1.5s ease-in-out infinite;
+}
+
+/* 故障状态闪烁动画 */
+@keyframes fault-pulse {
+  0% {
+    box-shadow: 0 6px 20px rgba(229, 57, 53, 0.4);
+    border-color: #e53935;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 8px 30px rgba(229, 57, 53, 0.8);
+    border-color: #d32f2f;
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 6px 20px rgba(229, 57, 53, 0.4);
+    border-color: #e53935;
+    transform: scale(1);
+  }
+}
+
+/* 增强的状态显示区域 */
+.enhanced-status-display {
+  padding: 25px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+
+/* 设备信息区域 */
+.device-info {
+  text-align: center;
+  width: 100%;
+}
+
+.device-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #303133;
+  margin: 0 0 10px 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.shift-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #606266;
+  font-size: 14px;
+  background: rgba(255,255,255,0.7);
+  padding: 6px 12px;
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+}
+
+/* 状态指示器中心区域 */
+.status-center {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.enhanced-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px 30px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+  position: relative;
+  min-width: 280px;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.enhanced-status-indicator.running {
+  background: rgba(103, 194, 58, 0.15);
+  border: 2px solid rgba(103, 194, 58, 0.3);
+  color: #409eff;
+}
+
+.enhanced-status-indicator.stopped {
+  background: rgba(144, 147, 153, 0.15);
+  border: 2px solid rgba(144, 147, 153, 0.3);
+  color: #606266;
+}
+
+.enhanced-status-indicator.fault {
+  background: linear-gradient(135deg, rgba(229, 57, 53, 0.2), rgba(211, 47, 47, 0.25));
+  border: 3px solid rgba(229, 57, 53, 0.6);
+  color: #b71c1c;
+  animation: status-shake 1s ease-in-out infinite;
+  box-shadow: 0 4px 16px rgba(229, 57, 53, 0.3);
+}
+
+/* 故障状态摇晃动画 */
+@keyframes status-shake {
+  0%, 100% { transform: translateX(0) translateY(0); }
+  10% { transform: translateX(-3px) translateY(-1px); }
+  20% { transform: translateX(3px) translateY(1px); }
+  30% { transform: translateX(-3px) translateY(-1px); }
+  40% { transform: translateX(3px) translateY(1px); }
+  50% { transform: translateX(-2px) translateY(0); }
+  60% { transform: translateX(2px) translateY(0); }
+  70% { transform: translateX(-1px) translateY(0); }
+  80% { transform: translateX(1px) translateY(0); }
+  90% { transform: translateX(0) translateY(0); }
+}
+
+/* 状态图标包装器 */
+.status-icon-wrapper {
+  position: relative;
+}
+
+.status-icon {
+  font-size: 32px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.enhanced-status-indicator.running .status-icon {
+  color: #67c23a;
+  animation: running-rotate 3s linear infinite;
+}
+
+.enhanced-status-indicator.stopped .status-icon {
+  color: #909399;
+}
+
+.enhanced-status-indicator.fault .status-icon {
+  color: #d32f2f;
+  animation: fault-bounce 0.8s ease-in-out infinite;
+  filter: drop-shadow(0 2px 8px rgba(229, 57, 53, 0.6));
+}
+
+/* 运行状态旋转动画 */
+@keyframes running-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 故障状态跳动动画 */
+@keyframes fault-bounce {
+  0%, 100% { 
+    transform: scale(1) rotate(0deg); 
+  }
+  25% { 
+    transform: scale(1.15) rotate(-5deg); 
+  }
+  75% { 
+    transform: scale(1.15) rotate(5deg); 
+  }
+}
+
+/* 状态内容 */
+.status-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.status-text {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* 故障状态下的状态文字加强 */
+.enhanced-status-indicator.fault .status-text {
+  font-size: 20px;
+  font-weight: 800;
+  text-shadow: 0 1px 3px rgba(183, 28, 28, 0.3);
+  color: #b71c1c;
+}
+
+.fault-name-emphasis {
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #ffebee, #ffcdd2);
+  border-radius: 12px;
+  border: 2px solid #e53935;
+  color: #b71c1c;
+  text-align: center;
+  box-shadow: 0 3px 12px rgba(229, 57, 53, 0.3);
+  animation: fault-name-glow 2s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+}
+
+.fault-name-emphasis::before {
+  content: '⚠️ 故障详情';
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #d32f2f;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* 故障名称发光动画 */
+@keyframes fault-name-glow {
+  0% {
+    box-shadow: 0 3px 12px rgba(229, 57, 53, 0.3);
+  }
+  50% {
+    box-shadow: 0 5px 20px rgba(229, 57, 53, 0.6);
+  }
+  100% {
+    box-shadow: 0 3px 12px rgba(229, 57, 53, 0.3);
+  }
+}
+
+/* 操作按钮区域 */
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+}
+
+.action-btn {
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 20px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* AI分析卡片增强样式 */
+.ai-analysis-card {
+  max-width: 100%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 2px solid #cbd5e1;
+  box-shadow: 0 4px 15px rgba(148, 163, 184, 0.15);
+  position: relative;
+  transition: all 0.3s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-analysis-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 100%);
+  pointer-events: none;
+}
+
+.ai-analysis-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(148, 163, 184, 0.2);
+}
+
+.ai-analysis-card .card-header {
+  background: rgba(248, 250, 252, 0.9);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(203, 213, 225, 0.5);
+  color: #475569;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ai-analysis-card .card-title {
+  color: #334155;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(71, 85, 105, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.ai-analysis-card .card-title::before {
+  content: '🤖';
+  font-size: 24px;
+  filter: drop-shadow(0 1px 2px rgba(71, 85, 105, 0.2));
+}
+
+.ai-analysis-content {
+  max-height: calc(100vh - 10px);
+  min-height: 600px;
+  overflow-y: auto;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  margin: 15px;
+  position: relative;
+  z-index: 1;
+  padding: 20px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 流式状态指示器增强 */
+.streaming-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 12px;
+  background: rgba(248, 250, 252, 0.8);
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(203, 213, 225, 0.6);
+  backdrop-filter: blur(5px);
+  animation: streaming-pulse-soft 2s ease-in-out infinite;
+}
+
+@keyframes streaming-pulse-soft {
+  0%, 100% {
+    background: rgba(248, 250, 252, 0.8);
+    box-shadow: 0 0 8px rgba(148, 163, 184, 0.2);
+  }
+  50% {
+    background: rgba(241, 245, 249, 0.9);
+    box-shadow: 0 0 15px rgba(148, 163, 184, 0.3);
+  }
+}
+
+.streaming-indicator .el-icon {
+  font-size: 16px;
+  color: #3b82f6;
+  filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.4));
+}
+
+/* 无故障消息美化 */
+.no-fault-message {
+  text-align: center;
+  padding: 60px 20px;
+  color: #10b981;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-radius: 12px;
+  border: 2px solid #a7f3d0;
+  position: relative;
+  overflow: hidden;
+}
+
+.no-fault-message::before {
+  content: '✅';
+  display: block;
+  font-size: 48px;
+  margin-bottom: 15px;
+  filter: drop-shadow(0 2px 4px rgba(16, 185, 129, 0.3));
+}
+
+.no-fault-message::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
+  animation: status-shimmer 3s ease-in-out infinite;
+}
+
+/* AI分析加载状态美化 */
+.analysis-loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-radius: 12px;
+  border: 2px solid #93c5fd;
+  position: relative;
+  overflow: hidden;
+}
+
+.analysis-loading .el-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  color: #3b82f6;
+  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.4));
+}
+
+.analysis-loading p {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  text-shadow: 0 1px 2px rgba(59, 130, 246, 0.2);
+}
+
+.analysis-loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: loading-shimmer 2s ease-in-out infinite;
+}
+
+@keyframes loading-shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* 提示分析美化 */
+.prompt-analysis {
+  text-align: center;
+  padding: 60px 20px;
+  color: #f59e0b;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-radius: 12px;
+  border: 2px solid #fbbf24;
+  position: relative;
+  overflow: hidden;
+}
+
+.prompt-analysis::before {
+  content: '⚠️';
+  display: block;
+  font-size: 48px;
+  margin-bottom: 15px;
+  filter: drop-shadow(0 2px 4px rgba(245, 158, 11, 0.3));
+}
+
+.prompt-analysis p {
+  margin-bottom: 25px;
+  font-size: 16px;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(245, 158, 11, 0.2);
+}
+
+.prompt-analysis .el-button {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: none;
+  padding: 12px 24px;
+  font-weight: 600;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+  transition: all 0.3s ease;
+}
+
+.prompt-analysis .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.6);
+}
+
+/* 分析内容包装器美化 */
+.analysis-content-wrapper {
+  position: relative;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 流式输入光标增强 */
+.streaming-cursor {
+  display: inline-block;
+  color: #3b82f6;
+  font-weight: bold;
+  font-size: 18px;
+  animation: cursor-blink 1s infinite;
+  margin-left: 3px;
+  text-shadow: 0 0 5px rgba(59, 130, 246, 0.6);
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes status-shimmer {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 老版本状态显示区域 - 已替换为增强版本 */
 .status-display {
   text-align: center;
   padding: 20px;
@@ -930,6 +1589,7 @@ onUnmounted(() => {
   color: #606266;
 }
 
+/* 老版本状态指示器 - 已替换为增强版本 */
 .status-indicator {
   display: inline-flex;
   align-items: center;
@@ -970,32 +1630,125 @@ onUnmounted(() => {
 
 .params-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 8px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .param-item {
   display: flex;
-  justify-content: space-between;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 6px;
-  border-left: 4px solid #409eff;
+  flex-direction: column;
+  padding: 12px 10px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+  border-radius: 8px;
+  border: 1px solid #e1ecf4;
+  transition: all 0.3s ease;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.08);
+  overflow: hidden;
+  min-height: 65px;
 }
 
+.param-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #409eff, #67c23a, #e6a23c, #f56c6c);
+  opacity: 0.8;
+}
+
+.param-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(64, 158, 255, 0.15);
+  border-color: #409eff;
+}
+
+.param-item:hover::before {
+  width: 6px;
+  opacity: 1;
+}
+
+/* 参数标签样式 */
 .param-label {
+  font-size: 11px;
+  font-weight: 600;
   color: #606266;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
+.param-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #409eff;
+  opacity: 0.6;
+}
+
+/* 参数数值样式 */
 .param-value {
-  font-weight: bold;
+  font-size: 18px;
+  font-weight: 700;
   color: #303133;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  position: relative;
+  line-height: 1.2;
+}
+
+/* 为不同参数添加不同的主题色 */
+.param-item:nth-child(1) .param-label::before {
+  background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+}
+
+.param-item:nth-child(2) .param-label::before {
+  background: linear-gradient(45deg, #4ecdc4, #44a08d);
+}
+
+.param-item:nth-child(3) .param-label::before {
+  background: linear-gradient(45deg, #45b7d1, #96c93d);
+}
+
+.param-item:nth-child(4) .param-label::before {
+  background: linear-gradient(45deg, #f7b731, #5f27cd);
+}
+
+/* 数值动画效果 */
+.param-value {
+  position: relative;
+  overflow: hidden;
+}
+
+.param-value::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  animation: param-shine 3s ease-in-out infinite;
+}
+
+@keyframes param-shine {
+  0% { left: -100%; }
+  50% { left: 100%; }
+  100% { left: 100%; }
 }
 
 .no-fault-message, .prompt-analysis {
   text-align: center;
   padding: 40px 20px;
-  color: #909399;
+  /* 具体样式在上面已经定义 */
 }
 
 .prompt-analysis p {
@@ -1005,7 +1758,7 @@ onUnmounted(() => {
 .analysis-loading {
   text-align: center;
   padding: 40px 20px;
-  color: #409eff;
+  /* 具体样式在上面已经定义 */
 }
 
 .analysis-loading .el-icon {
@@ -1016,13 +1769,272 @@ onUnmounted(() => {
 .markdown-content {
   line-height: 1.8;
   color: #333;
+  font-size: 14px;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
-.markdown-content :deep(h3), .markdown-content :deep(h2) {
+.markdown-content.analysis-result {
+  max-height: none;
+  height: 100%;
+  overflow-y: auto;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  scrollbar-width: thin;
+  scrollbar-color: #c1c1c1 #f1f1f1;
+  flex: 1;
+}
+
+.markdown-content.analysis-result::-webkit-scrollbar {
+  width: 6px;
+}
+
+.markdown-content.analysis-result::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.markdown-content.analysis-result::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.markdown-content.analysis-result::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 标题样式 */
+.markdown-content :deep(h1) {
+  color: #303133;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 20px 0 15px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #409eff;
+}
+
+.markdown-content :deep(h2) {
   color: #409eff;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 18px 0 12px 0;
+  padding-bottom: 6px;
   border-bottom: 1px solid #ebeef5;
-  padding-bottom: 5px;
-  margin-top: 25px;
+}
+
+.markdown-content :deep(h3) {
+  color: #409eff;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 16px 0 10px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px dotted #ebeef5;
+}
+
+.markdown-content :deep(h4) {
+  color: #606266;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 14px 0 8px 0;
+}
+
+.markdown-content :deep(h5) {
+  color: #606266;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 12px 0 6px 0;
+}
+
+.markdown-content :deep(h6) {
+  color: #909399;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 10px 0 5px 0;
+}
+
+/* 段落样式 */
+.markdown-content :deep(p) {
+  margin-bottom: 12px;
+  line-height: 1.7;
+  text-align: justify;
+}
+
+/* 列表样式 */
+.markdown-content :deep(ul), .markdown-content :deep(ol) {
+  margin: 12px 0;
+  padding-left: 25px;
+}
+
+.markdown-content :deep(li) {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.markdown-content :deep(ul ul), .markdown-content :deep(ol ol) {
+  margin: 6px 0;
+}
+
+/* 强调样式 */
+.markdown-content :deep(strong) {
+  color: #409eff;
+  font-weight: 700;
+}
+
+.markdown-content :deep(em) {
+  color: #67c23a;
+  font-style: italic;
+}
+
+.markdown-content :deep(mark) {
+  background-color: #fff566;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* 代码样式 */
+.markdown-content :deep(code) {
+  background: #f1f2f6;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  color: #e83e8c;
+  border: 1px solid #e9ecef;
+}
+
+.markdown-content :deep(pre) {
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 16px 0;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.markdown-content :deep(pre code) {
+  background: none;
+  padding: 0;
+  color: #333;
+  border: none;
+  font-size: 13px;
+}
+
+/* 引用样式 */
+.markdown-content :deep(blockquote) {
+  border-left: 4px solid #409eff;
+  padding: 12px 16px;
+  margin: 16px 0;
+  background: #f8f9ff;
+  border-radius: 4px;
+  color: #666;
+  font-style: italic;
+}
+
+.markdown-content :deep(blockquote p) {
+  margin: 0;
+}
+
+/* 表格样式 */
+.markdown-content :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 13px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.markdown-content :deep(thead) {
+  background: linear-gradient(135deg, #409eff 0%, #36a3f7 100%);
+}
+
+.markdown-content :deep(th) {
+  background: transparent;
+  color: #000000;
+  font-weight: 700;
+  padding: 12px 8px;
+  text-align: left;
+  border: none;
+  text-shadow: none;
+}
+
+.markdown-content :deep(td) {
+  padding: 10px 8px;
+  border-bottom: 1px solid #ebeef5;
+  border-right: 1px solid #ebeef5;
+}
+
+.markdown-content :deep(tbody tr:nth-child(even)) {
+  background-color: #fafafa;
+}
+
+.markdown-content :deep(tbody tr:hover) {
+  background-color: #f0f9ff;
+}
+
+/* 分割线样式 */
+.markdown-content :deep(hr) {
+  border: none;
+  border-top: 2px solid #ebeef5;
+  margin: 20px 0;
+  background: linear-gradient(to right, transparent, #ebeef5, transparent);
+}
+
+/* 链接样式 */
+.markdown-content :deep(a) {
+  color: #409eff;
+  text-decoration: none;
+  border-bottom: 1px dotted #409eff;
+  transition: all 0.3s ease;
+}
+
+.markdown-content :deep(a:hover) {
+  color: #66b1ff;
+  border-bottom: 1px solid #66b1ff;
+}
+
+/* 图片样式 */
+.markdown-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 10px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* 任务列表样式 */
+.markdown-content :deep(input[type="checkbox"]) {
+  margin-right: 8px;
+  transform: scale(1.2);
+}
+
+/* 脚注样式 */
+.markdown-content :deep(sup) {
+  font-size: 0.75em;
+  vertical-align: super;
+  color: #409eff;
+}
+
+/* 键盘按键样式 */
+.markdown-content :deep(kbd) {
+  background: #f7f7f7;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.2), 0 0 0 2px #fff inset;
+  color: #333;
+  display: inline-block;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0 0.1em;
+  padding: 0.1em 0.6em;
+  text-shadow: 0 1px 0 #fff;
 }
 
 .markdown-content :deep(table) {
@@ -1138,7 +2150,35 @@ onUnmounted(() => {
 .no-data {
   text-align: center;
   color: #909399;
-  padding: 20px;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  border: 2px dashed #d3d3d3;
+  margin: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.no-data::before {
+  content: '📄';
+  display: block;
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+  animation: float 3s ease-in-out infinite;
+}
+
+.no-data::after {
+  content: '暂无参数数据';
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+  color: #606266;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
 }
 
 /* 登录提示弹窗样式 */
@@ -1440,8 +2480,21 @@ onUnmounted(() => {
 
     /* 设备参数网格 */
     .params-grid {
-      grid-template-columns: 1fr;
-      gap: 10px;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    
+    .param-item {
+      padding: 8px 6px;
+      min-height: 55px;
+    }
+    
+    .param-value {
+      font-size: 14px;
+    }
+    
+    .param-label {
+      font-size: 10px;
     }
 
     /* 故障看板 */

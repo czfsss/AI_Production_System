@@ -114,7 +114,7 @@ const handleLogin = async (e: Event) => {
       authStore.login(userData)
       isLoginDialogVisible.value = false
       document.body.style.overflow = ''
-      alert('登录成功！')
+      showSuccessNotification()
     } else {
       const errorData = await response.json()
       let errorMessage = '登录失败'
@@ -138,6 +138,25 @@ const handleLogin = async (e: Event) => {
     console.error('登录请求失败：', error)
     alert('登录请求失败，请检查网络连接')
   }
+}
+
+// 显示成功通知
+const showSuccessNotification = () => {
+  const notification = document.createElement('div')
+  notification.className = 'success-notification'
+  notification.innerHTML = `
+    <div class="notification-icon">✓</div>
+    <div class="notification-message">登录成功！</div>
+  `
+  document.body.appendChild(notification)
+  
+  // 3秒后自动移除通知
+  setTimeout(() => {
+    notification.classList.add('fade-out')
+    setTimeout(() => {
+      document.body.removeChild(notification)
+    }, 500)
+  }, 3000)
 }
 
 // 注册功能
@@ -169,7 +188,7 @@ const handleRegister = async (e: Event) => {
       authStore.login(userData)
       isLoginDialogVisible.value = false
       document.body.style.overflow = ''
-      alert('注册成功！')
+      showSuccessNotification()
     } else {
       const errorData = await response.json()
       let errorMessage = '注册失败'
@@ -557,6 +576,56 @@ const handleRegister = async (e: Event) => {
   cursor: pointer;
 }
 
+/* 成功通知样式 */
+.success-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: linear-gradient(45deg, #4CAF50, #8BC34A);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  z-index: 10000;
+  animation: slideIn 0.3s ease-out;
+  transition: opacity 0.5s ease-out;
+}
+
+.success-notification.fade-out {
+  opacity: 0;
+}
+
+.notification-icon {
+  font-size: 20px;
+  font-weight: bold;
+  margin-right: 10px;
+  background: rgba(255, 255, 255, 0.2);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-message {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .btn {
@@ -564,6 +633,17 @@ const handleRegister = async (e: Event) => {
     padding: 0.5rem 1.5rem; /* 减小内边距 */
     border-radius: 0.6rem; /* 调整圆角 */
     box-shadow: 0px 0px 40px #1f4c65; /* 减小阴影 */
+  }
+  
+  .success-notification {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    padding: 12px 15px;
+  }
+  
+  .notification-message {
+    font-size: 14px;
   }
 }
 

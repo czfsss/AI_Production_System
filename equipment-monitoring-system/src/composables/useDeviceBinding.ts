@@ -1,17 +1,49 @@
-import { ref, reactive } from 'vue'
+import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getRandomFaultName } from '../data/faultNames'
 
 interface DeviceOption {
   label: string
   value: string | number
 }
 
+interface BoundDeviceInfo {
+  type: string
+  number: string | number
+  shift: string
+  id: string
+}
+
+interface DeviceParams {
+  temperature: string
+  pressure: string
+  speed: number
+  runtime: string
+  humidity: string
+  vibration: string
+  current: string
+  voltage: string
+  power: string
+  flow: string
+  oilTemp: string
+  oilPressure: string
+  throughput: string
+  energy: string
+  efficiency: string
+}
+
 export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
+  // 从localStorage恢复状态
+  const savedBoundDeviceInfo = localStorage.getItem('boundDeviceInfo')
+  const savedCurrentDeviceParams = localStorage.getItem('currentDeviceParams')
+  const savedDeviceStatus = localStorage.getItem('deviceStatus')
+  const savedFaultName = localStorage.getItem('faultName')
+  
   // 设备绑定相关状态
   const deviceType = ref('')
   const deviceNumber = ref('')
   const shift = ref('')
-  const isDeviceBound = ref(false)
+  const isDeviceBound = ref(!!savedBoundDeviceInfo)
 
   // 设备选项
   const deviceTypes: DeviceOption[] = [
@@ -32,10 +64,10 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
   ]
 
   // 设备数据
-  const boundDeviceInfo = ref<any>(null)
-  const currentDeviceParams = ref<any>(null)
-  const deviceStatus = ref<'running' | 'stopped' | 'fault'>('stopped')
-  const faultName = ref('')
+  const boundDeviceInfo = ref<BoundDeviceInfo | null>(savedBoundDeviceInfo ? JSON.parse(savedBoundDeviceInfo) : null)
+  const currentDeviceParams = ref<DeviceParams | null>(savedCurrentDeviceParams ? JSON.parse(savedCurrentDeviceParams) : null)
+  const deviceStatus = ref<'running' | 'stopped' | 'fault'>((savedDeviceStatus as 'running' | 'stopped' | 'fault') || 'stopped')
+  const faultName = ref(savedFaultName || '')
 
   // 绑定设备
   const bindDevice = () => {
@@ -59,10 +91,28 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
         temperature: (Math.random() * 30 + 50).toFixed(1),
         pressure: (Math.random() * 2 + 1).toFixed(1),
         speed: Math.floor(Math.random() * 500 + 1000),
-        runtime: '0h 5m'
+        runtime: '0h 5m',
+        humidity: (Math.random() * 20 + 45).toFixed(1),
+        vibration: (Math.random() * 2 + 0.5).toFixed(2),
+        current: (Math.random() * 5 + 10).toFixed(1),
+        voltage: (Math.random() * 20 + 380).toFixed(0),
+        power: (Math.random() * 10 + 25).toFixed(1),
+        flow: (Math.random() * 5 + 15).toFixed(1),
+        oilTemp: (Math.random() * 15 + 35).toFixed(1),
+        oilPressure: (Math.random() * 1 + 2.5).toFixed(1),
+        throughput: Math.floor(Math.random() * 200 + 800),
+        energy: (Math.random() * 50 + 100).toFixed(1),
+        efficiency: (Math.random() * 10 + 85).toFixed(1)
       }
       
       isDeviceBound.value = true
+      
+      // 保存状态到localStorage
+      localStorage.setItem('boundDeviceInfo', JSON.stringify(boundDeviceInfo.value))
+      localStorage.setItem('currentDeviceParams', JSON.stringify(currentDeviceParams.value))
+      localStorage.setItem('deviceStatus', deviceStatus.value)
+      localStorage.setItem('faultName', faultName.value)
+      
       ElMessage.success('设备绑定成功')
     })
   }
@@ -81,6 +131,13 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
         boundDeviceInfo.value = null
         currentDeviceParams.value = null
         deviceStatus.value = 'stopped'
+        
+        // 清除localStorage中的设备状态
+        localStorage.removeItem('boundDeviceInfo')
+        localStorage.removeItem('currentDeviceParams')
+        localStorage.removeItem('deviceStatus')
+        localStorage.removeItem('faultName')
+        
         ElMessage.info('设备已解绑')
       })
       .catch(() => {
@@ -105,15 +162,28 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
   }
 
   // 模拟设备故障
-  const simulateDeviceFault = () => {
-    requireAuth(() => {
+  const simulateDeviceFault = (autoAnalyze: () => Promise<void> = async () => {}) => {
+    requireAuth(async () => {
       if (deviceStatus.value === 'running') {
         deviceStatus.value = 'fault'
-        faultName.value = '传感器通讯中断'
+        faultName.value = getRandomFaultName() // 使用随机故障名称
+        // 更新localStorage
+        localStorage.setItem('deviceStatus', deviceStatus.value)
+        localStorage.setItem('faultName', faultName.value)
         ElMessage.error(`设备发生故障: ${faultName.value}`)
+        
+        // 自动触发AI分析
+        try {
+          await autoAnalyze()
+        } catch (error) {
+          console.warn('自动故障分析失败:', error)
+        }
       } else if (deviceStatus.value === 'fault') {
         deviceStatus.value = 'running'
         faultName.value = ''
+        // 更新localStorage
+        localStorage.setItem('deviceStatus', deviceStatus.value)
+        localStorage.setItem('faultName', faultName.value)
         ElMessage.success('设备已恢复正常')
       }
     })

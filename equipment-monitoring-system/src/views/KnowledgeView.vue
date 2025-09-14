@@ -7,12 +7,12 @@ const agents = [
   {
     id: 'process',
     name: '工艺问答',
-    src: 'http://10.43.32.231:1130/chatbot/rOK3d8Jw8zm8Ur7p'
+    src: 'http://10.43.32.231:1130/chatbot/Z0SFrPZm83VmjHbt'
   },
   {
     id: 'system',
     name: '制度问答',
-    src: 'http://10.43.32.231:1130/chatbot/9PYF45N0JkpQIoQp'
+    src: 'http://10.43.32.231:1130/chatbot/Vw5V3jMVzKGKaJ2p'
   },
   {
     id: 'safety',

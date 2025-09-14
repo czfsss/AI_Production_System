@@ -1,6 +1,7 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
+import { getMultipleRandomFaultNames } from '../data/faultNames'
 
 interface ChartFilters {
   dateRange: [Date, Date]
@@ -232,14 +233,12 @@ export function useCharts() {
   const updateChart2 = () => {
     if (!chart2Instance) return
     
-    const mockData: ChartDataItem[] = [
-      { name: '液压系统压力过高', value: 45 },
-      { name: '烟支供应中断', value: 30 },
-      { name: '电机过载', value: 60 },
-      { name: '传感器故障', value: 25 },
-      { name: '温度异常', value: 35 },
-      { name: '润滑不足', value: 40 }
-    ]
+    // 使用真实的故障名称数据
+    const randomFaultNames = getMultipleRandomFaultNames(6)
+    const mockData: ChartDataItem[] = randomFaultNames.map(faultName => ({
+      name: faultName,
+      value: Math.floor(Math.random() * 40) + 20 // 20-60分钟的随机停机时长
+    }))
 
     const data = mockData.map(item => item.value);
     const maxValue = Math.max(...data);
@@ -258,11 +257,15 @@ export function useCharts() {
           saveAsImage: {}
         }
       },
-      grid: { top: '20%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
+      grid: { top: '20%', right: '3%', left: '3%', bottom: '20%', containLabel: true },
       xAxis: {
         type: 'category',
         data: mockData.map(item => item.name),
-        axisLabel: { rotate: 45 }
+        axisLabel: { 
+          rotate: 45,
+          fontSize: 10,
+          interval: 0
+        }
       },
       yAxis: {
         type: 'value',
@@ -288,31 +291,40 @@ export function useCharts() {
   const updateChart3 = () => {
     if (!chart3Instance) return
     
-    const mockData: PieDataItem[] = [
-      { value: 15, name: '液压系统压力过高' },
-      { value: 12, name: '烟支供应中断' },
-      { value: 20, name: '电机过载' },
-      { value: 8, name: '传感器故障' },
-      { value: 10, name: '温度异常' },
-      { value: 5, name: '其他' }
-    ]
+    // 使用真实的故障名称数据
+    const randomFaultNames = getMultipleRandomFaultNames(6)
+    const mockData: PieDataItem[] = randomFaultNames.map(faultName => ({
+      value: Math.floor(Math.random() * 15) + 5, // 5-20次的随机故障次数
+      name: faultName
+    }))
 
     const option = {
       title: { text: '本班故障分类统计', left: 'center', textStyle: { fontSize: 16 } },
       tooltip: {
         trigger: 'item',
-        formatter: '{a} <br/>{b}: {c} ({d}%)'
+        formatter: '{a} <br/>{b}: {c} ({d}%)',
+        textStyle: {
+          fontSize: 12
+        }
       },
       legend: {
-        orient: 'vertical',
-        bottom: '30%',
-        left: 'left'
+        orient: 'horizontal',
+        bottom: '5%',
+        left: 'center',
+        textStyle: {
+          fontSize: 10
+        },
+        formatter: function(name: string) {
+          // 截断过长的故障名称
+          return name.length > 15 ? name.substring(0, 15) + '...' : name
+        }
       },
-      grid: { top: '20%', right: '3%', left: '3%', bottom: '10%', containLabel: true },
+      grid: { top: '20%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
       series: [{
         name: '故障次数',
         type: 'pie',
-        radius: '60%',
+        radius: ['30%', '60%'], // 改为环形图，节省空间
+        center: ['50%', '45%'], // 居中显示，向上偏移一点给底部图例留空间
         avoidLabelOverlap: false,
         itemStyle: {
           borderColor: '#fff',
@@ -320,14 +332,14 @@ export function useCharts() {
         },
         label: {
           show: true,
-          formatter: '{b}\n{c} ({d}%)',
+          formatter: '{c}次',
           position: 'outside',
-          fontSize: 12
+          fontSize: 10
         },
         emphasis: {
           label: {
             show: true,
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: 'bold'
           },
           itemStyle: {
@@ -338,8 +350,8 @@ export function useCharts() {
         },
         labelLine: {
           show: true,
-          length: 15,
-          length2: 20,
+          length: 8,
+          length2: 12,
           maxSurfaceAngle: 80
         },
         data: mockData,
