@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { View, Hide } from '@element-plus/icons-vue'
+import { API_CONFIG } from '../config/api'
 
 const authStore = useAuthStore()
 
@@ -100,7 +101,7 @@ const handleLogin = async (e: Event) => {
   
   try {
     // 调用后端登录API
-    const response = await fetch('http://127.0.0.1:8000/api/user/login', {
+    const response = await fetch(`${API_CONFIG.baseURL}/api/user/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -174,7 +175,7 @@ const handleRegister = async (e: Event) => {
   
   try {
     // 调用后端注册API
-    const response = await fetch('http://127.0.0.1:8000/api/user/register', {
+    const response = await fetch(`${API_CONFIG.baseURL}/api/user/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

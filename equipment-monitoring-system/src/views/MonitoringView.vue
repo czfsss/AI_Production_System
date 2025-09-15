@@ -1,5 +1,5 @@
   <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { 
   VideoPlay, 
@@ -41,7 +41,6 @@ const {
   bindDevice,
   unbindDevice,
   getStatusText,
-  getStatusClass,
   simulateDeviceFault
 } = useDeviceBinding(requireAuth)
 
@@ -54,11 +53,11 @@ const {
   chart5Ref,
   chartFilters,
   isRefreshing,
-  refreshInterval,
   initCharts,
   refreshCharts,
   startAutoRefresh,
-  stopAutoRefresh
+  stopAutoRefresh,
+  forceResizeCharts
 } = useCharts()
 
 // 初始化故障分析相关功能
@@ -152,9 +151,18 @@ watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => 
     }
   }
   
-  // 当切换到数据看板时，自动刷新图表数据
+  // 当切换到数据看板时，延迟初始化和刷新图表
   if (newActiveTab === 'fault-dashboard' && newFaultDashboardTab === 'data-dashboard') {
-    refreshCharts()
+    // 使用 nextTick 确保 DOM 更新完成后再初始化图表
+    nextTick(() => {
+      setTimeout(() => {
+        initCharts()
+        // 再次延迟调整图表大小，确保容器尺寸正确
+        setTimeout(() => {
+          forceResizeCharts()
+        }, 100)
+      }, 50)
+    })
   }
 })
 
@@ -169,10 +177,17 @@ watch(() => authStore.isLoggedIn, (newValue, oldValue) => {
 // 监听标签页变化，管理图表自动刷新
 watch(activeTab, (newTab) => {
   if (newTab === 'fault-dashboard') {
-    setTimeout(() => {
-      initCharts()
-      startAutoRefresh()
-    }, 100)
+    // 使用 nextTick 确保标签页内容已经渲染
+    nextTick(() => {
+      setTimeout(() => {
+        initCharts()
+        startAutoRefresh()
+        // 额外的延迟调整，解决图表挤压问题
+        setTimeout(() => {
+          forceResizeCharts()
+        }, 200)
+      }, 100)
+    })
   } else {
     stopAutoRefresh()
   }
@@ -188,10 +203,16 @@ watch(activeTab, (newTab) => {
     
     // 如果当前标签页是故障看板，则初始化图表
     if (activeTab.value === 'fault-dashboard') {
-      setTimeout(() => {
-        initCharts()
-        startAutoRefresh()
-      }, 100)
+      nextTick(() => {
+        setTimeout(() => {
+          initCharts()
+          startAutoRefresh()
+          // 确保图表尺寸正确
+          setTimeout(() => {
+            forceResizeCharts()
+          }, 200)
+        }, 100)
+      })
     }
     
     // 如果当前标签页是历史故障记录，则自动加载数据
@@ -2369,6 +2390,50 @@ onUnmounted(() => {
   .chart {
     width: 100%;
     height: 300px;
+    /* 确保图表容器有明确的尺寸 */
+    min-width: 100%;
+    min-height: 300px;
+    /* 修复图表在切换时被挤压的问题 */
+    box-sizing: border-box;
+    display: block;
+    overflow: hidden;
+  }
+
+  /* 图表容器动画效果优化 */
+  .chart-item {
+    flex: 1;
+    background: #fff;
+    border: 1px solid #e4e7ed;
+    border-radius: 4px;
+    padding: 15px;
+    /* 确保容器在切换时不会折叠 */
+    min-width: 0;
+    /* 修复图表被挤压问题 */
+    transition: all 0.3s ease;
+  }
+
+  /* 特别为图表容器添加显示状态 */
+  .chart-item[data-chart-loading="true"] .chart {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .chart-item[data-chart-loaded="true"] .chart {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 0.3s ease;
+  }
+
+  /* 添加图表容器的过渡动画，解决切换时的视觉闪烁 */
+  .charts-container {
+    /* 确保图表容器在切换时有平滑的过渡效果 */
+    transition: all 0.3s ease;
+  }
+
+  /* 确保图表在标签页切换时正确显示 */
+  .fault-dashboard .el-tab-pane {
+    /* 确保标签页内容区域有正确的尺寸 */
+    min-height: 500px;
   }
 
   .history-records {

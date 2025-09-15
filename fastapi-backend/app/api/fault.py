@@ -1,19 +1,22 @@
 from fastapi import APIRouter, HTTPException
 from typing import List
-from datetime import datetime,time
+from datetime import datetime, time
 from fastapi import APIRouter, HTTPException
+
 # 导入模型和查询模型
 from schemas.fault_info import *
+
 # 导入数据库模型
 from models.models import *
 
 
 fault_router = APIRouter()
 
+
 @fault_router.post(
     "/query_fault_history",
     response_model=List[FaultHistoryInfo],
-    summary="查询历史故障记录"
+    summary="查询历史故障记录",
 )
 async def query_fault_history(query: FaultQueryModel):
     # 构建查询条件
@@ -48,7 +51,19 @@ async def query_fault_history(query: FaultQueryModel):
     if query.sort_order == "desc":
         sort_field = f"-{sort_field}"
     # 执行查询
-    faults = await FaultInfo.filter(**query_conditions).order_by(sort_field).offset(offset).limit(query.page_size)
+    faults = (
+        await FaultInfo.filter(**query_conditions)
+        .order_by(sort_field)
+        .offset(offset)
+        .limit(query.page_size)
+    )
     # 转换为响应模型
     result = [FaultHistoryInfo(**fault.__dict__) for fault in faults]
     return result
+
+
+@fault_router.post("/insert_fault_info", summary="插入故障信息")
+async def insert_fault_info(fault_info: FaultHistoryInfo):
+    # 创建故障信息对象
+    insert_info = await FaultInfo.create(**fault_info.dict())
+    return {"message": "插入成功", "insert_id": insert_info.id}

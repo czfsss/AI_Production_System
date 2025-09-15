@@ -72,58 +72,74 @@ export function useCharts() {
 
   // 初始化图表
   const initCharts = () => {
-    // 销毁已存在的图表实例
-    if (chart1Instance) {
-      chart1Instance.dispose()
-      chart1Instance = null
-    }
-    if (chart2Instance) {
-      chart2Instance.dispose()
-      chart2Instance = null
-    }
-    if (chart3Instance) {
-      chart3Instance.dispose()
-      chart3Instance = null
-    }
-    if (chart4Instance) {
-      chart4Instance.dispose()
-      chart4Instance = null
-    }
-    if (chart5Instance) {
-      chart5Instance.dispose()
-      chart5Instance = null
-    }
-    
-    // 重新初始化图表实例
-    if (chart1Ref.value) {
-      chart1Instance = echarts.init(chart1Ref.value)
-      updateChart1()
-    }
-    if (chart2Ref.value) {
-      chart2Instance = echarts.init(chart2Ref.value)
-      updateChart2()
-    }
-    if (chart3Ref.value) {
-      chart3Instance = echarts.init(chart3Ref.value)
-      updateChart3()
-    }
-    if (chart4Ref.value) {
-      chart4Instance = echarts.init(chart4Ref.value)
-      updateChart4()
-    }
-    if (chart5Ref.value) {
-      chart5Instance = echarts.init(chart5Ref.value)
-      updateChart5()
-    }
+    // 使用 setTimeout 确保 DOM 已完全渲染
+    setTimeout(() => {
+      // 销毁已存在的图表实例
+      if (chart1Instance) {
+        chart1Instance.dispose()
+        chart1Instance = null
+      }
+      if (chart2Instance) {
+        chart2Instance.dispose()
+        chart2Instance = null
+      }
+      if (chart3Instance) {
+        chart3Instance.dispose()
+        chart3Instance = null
+      }
+      if (chart4Instance) {
+        chart4Instance.dispose()
+        chart4Instance = null
+      }
+      if (chart5Instance) {
+        chart5Instance.dispose()
+        chart5Instance = null
+      }
+      
+      // 重新初始化图表实例
+      if (chart1Ref.value) {
+        chart1Instance = echarts.init(chart1Ref.value)
+        updateChart1()
+      }
+      if (chart2Ref.value) {
+        chart2Instance = echarts.init(chart2Ref.value)
+        updateChart2()
+      }
+      if (chart3Ref.value) {
+        chart3Instance = echarts.init(chart3Ref.value)
+        updateChart3()
+      }
+      if (chart4Ref.value) {
+        chart4Instance = echarts.init(chart4Ref.value)
+        updateChart4()
+      }
+      if (chart5Ref.value) {
+        chart5Instance = echarts.init(chart5Ref.value)
+        updateChart5()
+      }
+      
+      // 确保图表尺寸正确
+      resizeCharts()
+    }, 50) // 50ms 延迟，确保 DOM 完全渲染
   }
 
   // 重新调整图表大小
   const resizeCharts = () => {
-    if (chart1Instance) chart1Instance.resize()
-    if (chart2Instance) chart2Instance.resize()
-    if (chart3Instance) chart3Instance.resize()
-    if (chart4Instance) chart4Instance.resize()
-    if (chart5Instance) chart5Instance.resize()
+    // 使用 requestAnimationFrame 确保在下一次重绘时调整大小
+    requestAnimationFrame(() => {
+      if (chart1Instance) chart1Instance.resize()
+      if (chart2Instance) chart2Instance.resize()
+      if (chart3Instance) chart3Instance.resize()
+      if (chart4Instance) chart4Instance.resize()
+      if (chart5Instance) chart5Instance.resize()
+    })
+  }
+
+  // 强制重新调整所有图表大小的函数
+  const forceResizeCharts = () => {
+    setTimeout(() => {
+      resizeCharts()
+    }, 100)
   }
 
   // 组件挂载时添加窗口大小改变监听
@@ -616,6 +632,8 @@ export function useCharts() {
     initCharts,
     refreshCharts,
     startAutoRefresh,
-    stopAutoRefresh
+    stopAutoRefresh,
+    resizeCharts,
+    forceResizeCharts
   }
 }
