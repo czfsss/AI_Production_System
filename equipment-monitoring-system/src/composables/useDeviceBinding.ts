@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getRandomFaultName } from '../data/faultNames'
+import { useRealTimeMonitoring } from './useRealTimeMonitoring'
 
 interface DeviceOption {
   label: string
@@ -32,7 +32,10 @@ interface DeviceParams {
   efficiency: string
 }
 
-export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
+export function useDeviceBinding(
+  requireAuth: (callback: () => void) => void,
+  onFaultDetected?: () => Promise<void>
+) {
   // 从localStorage恢复状态
   const savedBoundDeviceInfo = localStorage.getItem('boundDeviceInfo')
   const savedCurrentDeviceParams = localStorage.getItem('currentDeviceParams')
@@ -47,9 +50,8 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
 
   // 设备选项
   const deviceTypes: DeviceOption[] = [
-    { label: '卷接机', value: 'cigarette_machine' },
-    { label: '包装机', value: 'packing_machine' },
-    { label: '封箱机', value: 'cartoning_machine' }
+    { label: '卷烟机', value: 'cigarette_machine' },
+    { label: '包装机', value: 'packing_machine' }
   ]
   
   const deviceNumbers: DeviceOption[] = Array.from({ length: 22 }, (_, i) => ({ 
@@ -69,6 +71,25 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
   const deviceStatus = ref<'running' | 'stopped' | 'fault'>((savedDeviceStatus as 'running' | 'stopped' | 'fault') || 'stopped')
   const faultName = ref(savedFaultName || '')
 
+  // 初始化实时监控
+  const {
+    isMonitoring,
+    currentInterval,
+    monitoringStats,
+    equipmentName,
+    startMonitoring,
+    stopMonitoring,
+    refreshStatus,
+    checkDeviceStatus,
+    setSimulatedFault
+  } = useRealTimeMonitoring(
+    isDeviceBound,
+    boundDeviceInfo,
+    deviceStatus,
+    faultName,
+    onFaultDetected
+  )
+
   // 绑定设备
   const bindDevice = () => {
     requireAuth(() => {
@@ -85,24 +106,24 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
         id: `DEV-${deviceType.value}-${deviceNumber.value}`
       }
       
-      // 模拟获取初始设备状态和参数
-      deviceStatus.value = 'running'
+      // 初始化设备状态为停机，等待实时监控更新
+      deviceStatus.value = 'stopped'
       currentDeviceParams.value = {
-        temperature: (Math.random() * 30 + 50).toFixed(1),
-        pressure: (Math.random() * 2 + 1).toFixed(1),
-        speed: Math.floor(Math.random() * 500 + 1000),
-        runtime: '0h 5m',
-        humidity: (Math.random() * 20 + 45).toFixed(1),
-        vibration: (Math.random() * 2 + 0.5).toFixed(2),
-        current: (Math.random() * 5 + 10).toFixed(1),
-        voltage: (Math.random() * 20 + 380).toFixed(0),
-        power: (Math.random() * 10 + 25).toFixed(1),
-        flow: (Math.random() * 5 + 15).toFixed(1),
-        oilTemp: (Math.random() * 15 + 35).toFixed(1),
-        oilPressure: (Math.random() * 1 + 2.5).toFixed(1),
-        throughput: Math.floor(Math.random() * 200 + 800),
-        energy: (Math.random() * 50 + 100).toFixed(1),
-        efficiency: (Math.random() * 10 + 85).toFixed(1)
+        temperature: '0.0',
+        pressure: '0.0',
+        speed: 0,
+        runtime: '0h 0m',
+        humidity: '0.0',
+        vibration: '0.00',
+        current: '0.0',
+        voltage: '0',
+        power: '0.0',
+        flow: '0.0',
+        oilTemp: '0.0',
+        oilPressure: '0.0',
+        throughput: '0',
+        energy: '0.0',
+        efficiency: '0.0'
       }
       
       isDeviceBound.value = true
@@ -113,7 +134,7 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
       localStorage.setItem('deviceStatus', deviceStatus.value)
       localStorage.setItem('faultName', faultName.value)
       
-      ElMessage.success('设备绑定成功')
+      ElMessage.success('设备绑定成功，即将开始实时监控')
     })
   }
 
@@ -127,10 +148,14 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
         customClass: 'unbind-confirm'
       })
       .then(() => {
+        // 停止监控
+        stopMonitoring()
+        
         isDeviceBound.value = false
         boundDeviceInfo.value = null
         currentDeviceParams.value = null
         deviceStatus.value = 'stopped'
+        faultName.value = ''
         
         // 清除localStorage中的设备状态
         localStorage.removeItem('boundDeviceInfo')
@@ -138,7 +163,7 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
         localStorage.removeItem('deviceStatus')
         localStorage.removeItem('faultName')
         
-        ElMessage.info('设备已解绑')
+        ElMessage.info('设备已解绑，实时监控已停止')
       })
       .catch(() => {
         ElMessage.info('已取消解绑')
@@ -161,26 +186,32 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
     return `status-${status}`
   }
 
-  // 模拟设备故障
-  const simulateDeviceFault = (autoAnalyze: () => Promise<void> = async () => {}) => {
+  // 模拟设备故障（用于演示）
+  const simulateDeviceFault = async () => {
     requireAuth(async () => {
       if (deviceStatus.value === 'running') {
         deviceStatus.value = 'fault'
-        faultName.value = getRandomFaultName() // 使用随机故障名称
+        faultName.value = '模拟故障：传感器读数异常'
+        // 设置模拟故障状态，防止实时监控覆盖
+        setSimulatedFault(true)
         // 更新localStorage
         localStorage.setItem('deviceStatus', deviceStatus.value)
         localStorage.setItem('faultName', faultName.value)
         ElMessage.error(`设备发生故障: ${faultName.value}`)
         
         // 自动触发AI分析
-        try {
-          await autoAnalyze()
-        } catch (error) {
-          console.warn('自动故障分析失败:', error)
+        if (onFaultDetected) {
+          try {
+            await onFaultDetected()
+          } catch (error) {
+            console.warn('自动故障分析失败:', error)
+          }
         }
       } else if (deviceStatus.value === 'fault') {
         deviceStatus.value = 'running'
         faultName.value = ''
+        // 取消模拟故障状态，恢复实时监控
+        setSimulatedFault(false)
         // 更新localStorage
         localStorage.setItem('deviceStatus', deviceStatus.value)
         localStorage.setItem('faultName', faultName.value)
@@ -205,6 +236,15 @@ export function useDeviceBinding(requireAuth: (callback: () => void) => void) {
     unbindDevice,
     getStatusText,
     getStatusClass,
+    // 实时监控相关
+    isMonitoring,
+    currentInterval,
+    monitoringStats,
+    equipmentName,
+    startMonitoring,
+    stopMonitoring,
+    refreshStatus,
+    checkDeviceStatus,
     simulateDeviceFault
   }
 }

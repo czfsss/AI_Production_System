@@ -5,7 +5,8 @@ export const API_CONFIG = {
     login: '/api/user/login',
     register: '/api/user/register',
     getUserInfo: '/api/user/get_userInfo',
-    faultHistory: '/api/fault/query_fault_history'
+    faultHistory: '/api/fault/query_fault_history',
+    equipmentStatus: '/api/equ/equbending'
   }
 }
 
