@@ -19,11 +19,12 @@ export default defineConfig(() => {
       },
     },
     server: {
-      port: 1130
+      host: "10.43.32.231",
+      port: 1133
     },
     preview: {
       host: "10.43.32.231",
-      port: 1130
+      port: 1133
     },
     build: {
       outDir: 'dist',

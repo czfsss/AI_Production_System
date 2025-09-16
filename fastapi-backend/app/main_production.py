@@ -5,6 +5,7 @@ from settings import TORTOISE_ORM
 import uvicorn
 from api.user import user_router
 from api.fault import fault_router
+from api.equ_monitor import equ_bending_router
 import os
 
 app = FastAPI(
@@ -19,9 +20,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:1130",
-        "http://127.0.0.1:1130",
-        "http://10.43.32.231:1130",  # 生产环境前端地址
+        "http://localhost:1133",
+        "http://127.0.0.1:1133",
+        "http://10.43.32.231:1133",  # 生产环境前端地址
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -36,13 +37,15 @@ app.include_router(user_router, prefix="/api/user", tags=["用户相关API"])
 
 # 注册故障路由
 app.include_router(fault_router, prefix="/api/fault", tags=["故障相关API"])
+# 注册设备监测路由
+app.include_router(equ_bending_router, prefix="/api/equ", tags=["设备监测相关API"])
 
 if __name__ == "__main__":
     # 生产环境配置
     uvicorn.run(
         "main_production:app",
         host="10.43.32.231",  # 绑定到具体IP
-        port=8000,
+        port=1134,
         reload=False,  # 生产环境关闭热重载
         workers=1,  # 可以根据需要调整工作进程数
         access_log=True,
