@@ -15,21 +15,22 @@ interface BoundDeviceInfo {
 }
 
 interface DeviceParams {
-  temperature: string
-  pressure: string
-  speed: number
-  runtime: string
-  humidity: string
-  vibration: string
-  current: string
-  voltage: string
-  power: string
-  flow: string
-  oilTemp: string
-  oilPressure: string
-  throughput: string
-  energy: string
-  efficiency: string
+  productionSpeed: string
+  weightStandardDeviation: string
+  compressedAirPressure: string
+  compressedAirFlowCigarette: string
+  compressedAirFlowAssembly: string
+  vacuumSystemPressure: string
+  dustCollectionPressure: string
+  looseEndRejectRate: string
+  oee: string
+  airChamberNegativePressure: string
+  solderingIronTemperature: string
+  averageCigaretteWeight: string
+  cutterVibrationAmplitude: string
+  gluePumpPressure: string
+  cigaretteLength: string
+  spindleSpeed: string
 }
 
 export function useDeviceBinding(
@@ -81,12 +82,14 @@ export function useDeviceBinding(
     stopMonitoring,
     refreshStatus,
     checkDeviceStatus,
-    setSimulatedFault
+    setSimulatedFault,
+    updateDeviceParams
   } = useRealTimeMonitoring(
     isDeviceBound,
     boundDeviceInfo,
     deviceStatus,
     faultName,
+    currentDeviceParams,
     onFaultDetected
   )
 
@@ -109,21 +112,22 @@ export function useDeviceBinding(
       // 初始化设备状态为停机，等待实时监控更新
       deviceStatus.value = 'stopped'
       currentDeviceParams.value = {
-        temperature: '0.0',
-        pressure: '0.0',
-        speed: 0,
-        runtime: '0h 0m',
-        humidity: '0.0',
-        vibration: '0.00',
-        current: '0.0',
-        voltage: '0',
-        power: '0.0',
-        flow: '0.0',
-        oilTemp: '0.0',
-        oilPressure: '0.0',
-        throughput: '0',
-        energy: '0.0',
-        efficiency: '0.0'
+        productionSpeed: '0 支/分钟',
+        weightStandardDeviation: '0.000g',
+        compressedAirPressure: '0.0 bar',
+        compressedAirFlowCigarette: '0.0 m³/h',
+        compressedAirFlowAssembly: '0.0 m³/h',
+        vacuumSystemPressure: '0.0 bar',
+        dustCollectionPressure: '0.0 kPa',
+        looseEndRejectRate: '0.0%',
+        oee: '0.0%',
+        airChamberNegativePressure: '0.0 MPa',
+        solderingIronTemperature: '0℃',
+        averageCigaretteWeight: '0.0mg',
+        cutterVibrationAmplitude: '0.0mm/s',
+        gluePumpPressure: '0.0 bar',
+        cigaretteLength: '0.0mm',
+        spindleSpeed: '0rpm'
       }
       
       isDeviceBound.value = true
@@ -194,6 +198,8 @@ export function useDeviceBinding(
         faultName.value = '模拟故障：传感器读数异常'
         // 设置模拟故障状态，防止实时监控覆盖
         setSimulatedFault(true)
+        // 更新设备参数为故障状态
+        updateDeviceParams()
         // 更新localStorage
         localStorage.setItem('deviceStatus', deviceStatus.value)
         localStorage.setItem('faultName', faultName.value)
@@ -212,6 +218,8 @@ export function useDeviceBinding(
         faultName.value = ''
         // 取消模拟故障状态，恢复实时监控
         setSimulatedFault(false)
+        // 更新设备参数为运行状态
+        updateDeviceParams()
         // 更新localStorage
         localStorage.setItem('deviceStatus', deviceStatus.value)
         localStorage.setItem('faultName', faultName.value)
@@ -245,6 +253,7 @@ export function useDeviceBinding(
     stopMonitoring,
     refreshStatus,
     checkDeviceStatus,
+    updateDeviceParams,
     simulateDeviceFault
   }
 }

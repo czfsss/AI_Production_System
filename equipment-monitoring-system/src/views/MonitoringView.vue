@@ -45,6 +45,7 @@ const {
   startMonitoring,
   stopMonitoring,
   refreshStatus,
+  updateDeviceParams,
   simulateDeviceFault,
 } = useDeviceBinding(requireAuth, async () => {
   // 故障检测回调，调用AI分析
@@ -436,67 +437,76 @@ onUnmounted(() => {
             <div class="card device-params-card">
               <div class="card-header">
                 <h2 class="card-title">当前设备参数</h2>
+                <div class="header-actions">
+                  <el-button v-if="isDeviceBound" type="info" @click="updateDeviceParams" size="small"
+                    >刷新参数</el-button
+                  >
+                </div>
               </div>
               <div v-if="currentDeviceParams" class="params-grid">
                 <div class="param-item">
-                  <div class="param-label">温度</div>
-                  <div class="param-value">{{ currentDeviceParams.temperature }}°C</div>
+                  <div class="param-label">生产速度（卷接机）</div>
+                  <div class="param-value">{{ currentDeviceParams.productionSpeed }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">压力</div>
-                  <div class="param-value">{{ currentDeviceParams.pressure }} MPa</div>
+                  <div class="param-label">烟支重量标准偏差（SD）</div>
+                  <div class="param-value">{{ currentDeviceParams.weightStandardDeviation }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">转速</div>
-                  <div class="param-value">{{ currentDeviceParams.speed }} rpm</div>
+                  <div class="param-label">压缩空气工作压力</div>
+                  <div class="param-value">{{ currentDeviceParams.compressedAirPressure }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">运行时间</div>
-                  <div class="param-value">{{ currentDeviceParams.runtime }}</div>
+                  <div class="param-label">压缩空气流量（卷烟机）</div>
+                  <div class="param-value">{{ currentDeviceParams.compressedAirFlowCigarette }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">湿度</div>
-                  <div class="param-value">{{ currentDeviceParams.humidity }}%</div>
+                  <div class="param-label">压缩空气流量（接装机）</div>
+                  <div class="param-value">{{ currentDeviceParams.compressedAirFlowAssembly }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">振动</div>
-                  <div class="param-value">{{ currentDeviceParams.vibration }} mm/s</div>
+                  <div class="param-label">真空系统工作压力</div>
+                  <div class="param-value">{{ currentDeviceParams.vacuumSystemPressure }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">电流</div>
-                  <div class="param-value">{{ currentDeviceParams.current }} A</div>
+                  <div class="param-label">除尘系统负压</div>
+                  <div class="param-value">{{ currentDeviceParams.dustCollectionPressure }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">电压</div>
-                  <div class="param-value">{{ currentDeviceParams.voltage }} V</div>
+                  <div class="param-label">空头剔除率</div>
+                  <div class="param-value">{{ currentDeviceParams.looseEndRejectRate }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">功率</div>
-                  <div class="param-value">{{ currentDeviceParams.power }} kW</div>
+                  <div class="param-label">设备运行效率（OEE）</div>
+                  <div class="param-value">{{ currentDeviceParams.oee }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">流量</div>
-                  <div class="param-value">{{ currentDeviceParams.flow }} L/min</div>
+                  <div class="param-label">风室负压（压力传感器）</div>
+                  <div class="param-value">{{ currentDeviceParams.airChamberNegativePressure }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">润滑油温</div>
-                  <div class="param-value">{{ currentDeviceParams.oilTemp }}°C</div>
+                  <div class="param-label">烙铁温度（温度传感器）</div>
+                  <div class="param-value">{{ currentDeviceParams.solderingIronTemperature }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">润滑油压</div>
-                  <div class="param-value">{{ currentDeviceParams.oilPressure }} bar</div>
+                  <div class="param-label">烟支平均重量（称重传感器）</div>
+                  <div class="param-value">{{ currentDeviceParams.averageCigaretteWeight }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">处理量</div>
-                  <div class="param-value">{{ currentDeviceParams.throughput }} 件/h</div>
+                  <div class="param-label">刀头振动幅度（振动传感器）</div>
+                  <div class="param-value">{{ currentDeviceParams.cutterVibrationAmplitude }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">能耗</div>
-                  <div class="param-value">{{ currentDeviceParams.energy }} kWh</div>
+                  <div class="param-label">胶泵压力（压力传感器）</div>
+                  <div class="param-value">{{ currentDeviceParams.gluePumpPressure }}</div>
                 </div>
                 <div class="param-item">
-                  <div class="param-label">效率</div>
-                  <div class="param-value">{{ currentDeviceParams.efficiency }}%</div>
+                  <div class="param-label">烟支长度（激光传感器）</div>
+                  <div class="param-value">{{ currentDeviceParams.cigaretteLength }}</div>
+                </div>
+                <div class="param-item">
+                  <div class="param-label">主轴转速（编码器）</div>
+                  <div class="param-value">{{ currentDeviceParams.spindleSpeed }}</div>
                 </div>
               </div>
               <div v-else class="no-data">

@@ -10,7 +10,7 @@ import { Box, Clock } from '@element-plus/icons-vue'
 
         <div class="iframe-container">
           <iframe
-            src="http://10.43.32.231:1130/chatbot/HdzKLVDrl9Cle7mx"
+            src="http://10.43.32.231:1130/chatbot/6hr5ONUo1BedoEpo"
             style="width: 100%; height: 100%; min-height: 700px; border: none;"
             frameborder="0"
             allow="microphone">

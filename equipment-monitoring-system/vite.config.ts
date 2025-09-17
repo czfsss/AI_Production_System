@@ -19,7 +19,7 @@ export default defineConfig(() => {
       },
     },
     server: {
-      host: "10.43.32.231",
+      host: "127.0.0.1",
       port: 1133
     },
     preview: {

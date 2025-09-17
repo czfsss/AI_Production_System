@@ -19,6 +19,7 @@ export function useRealTimeMonitoring(
   boundDeviceInfo: Ref<BoundDeviceInfo | null>,
   deviceStatus: Ref<'running' | 'stopped' | 'fault'>,
   faultName: Ref<string>,
+  currentDeviceParams: Ref<any>,
   onFaultDetected?: () => Promise<void>
 ) {
   // 标记是否为模拟故障状态
@@ -44,9 +45,106 @@ export function useRealTimeMonitoring(
     return formatEquipmentName(boundDeviceInfo.value.type, boundDeviceInfo.value.number)
   })
 
+  // 更新设备参数
+  const updateDeviceParams = () => {
+    if (!currentDeviceParams.value) return
+    
+    // 根据设备状态更新参数
+    if (deviceStatus.value === 'running') {
+      // 设备运行时，生成随机参数值
+      currentDeviceParams.value = {
+        productionSpeed: `${Math.floor(Math.random() * 2000 + 8000)} 支/分钟`,
+        weightStandardDeviation: `${(Math.random() * 0.02 + 0.01).toFixed(3)}g`,
+        compressedAirPressure: `${(Math.random() * 1 + 5.5).toFixed(1)} bar`,
+        compressedAirFlowCigarette: `${(Math.random() * 1 + 4).toFixed(1)} m³/h`,
+        compressedAirFlowAssembly: `${(Math.random() * 1 + 3).toFixed(1)} m³/h`,
+        vacuumSystemPressure: `${(Math.random() * 0.1 - 0.55).toFixed(1)} bar`,
+        dustCollectionPressure: `${(Math.random() * 1.5 - 9).toFixed(2)} kPa`,
+        looseEndRejectRate: `${(Math.random() * 0.15).toFixed(2)}%`,
+        oee: `${(Math.random() * 5 + 90).toFixed(1)}%`,
+        airChamberNegativePressure: `${(Math.random() * 0.05 - 0.075).toFixed(3)} MPa`,
+        solderingIronTemperature: `${Math.floor(Math.random() * 50 + 350)}℃`,
+        averageCigaretteWeight: `${(Math.random() * 20 + 80).toFixed(1)}mg`,
+        cutterVibrationAmplitude: `${(Math.random() * 2 + 1).toFixed(1)}mm/s`,
+        gluePumpPressure: `${(Math.random() * 2 + 6).toFixed(1)} bar`,
+        cigaretteLength: `${(Math.random() * 5 + 82.5).toFixed(1)}mm`,
+        spindleSpeed: `${Math.floor(Math.random() * 500 + 2000)}rpm`
+      }
+    } else if (deviceStatus.value === 'stopped') {
+      // 设备停机时，参数归零或接近零
+      currentDeviceParams.value = {
+        productionSpeed: '0 支/分钟',
+        weightStandardDeviation: '0.000g',
+        compressedAirPressure: '0.0 bar',
+        compressedAirFlowCigarette: '0.0 m³/h',
+        compressedAirFlowAssembly: '0.0 m³/h',
+        vacuumSystemPressure: '0.0 bar',
+        dustCollectionPressure: '0.0 kPa',
+        looseEndRejectRate: '0.0%',
+        oee: '0.0%',
+        airChamberNegativePressure: '0.0 MPa',
+        solderingIronTemperature: '0℃',
+        averageCigaretteWeight: '0.0mg',
+        cutterVibrationAmplitude: '0.0mm/s',
+        gluePumpPressure: '0.0 bar',
+        cigaretteLength: '0.0mm',
+        spindleSpeed: '0rpm'
+      }
+    } else if (deviceStatus.value === 'fault') {
+      // 设备故障时，参数异常
+      currentDeviceParams.value = {
+        productionSpeed: `${Math.floor(Math.random() * 1000)} 支/分钟`,
+        weightStandardDeviation: `${(Math.random() * 0.05 + 0.03).toFixed(3)}g`,
+        compressedAirPressure: `${(Math.random() * 2 + 3).toFixed(1)} bar`,
+        compressedAirFlowCigarette: `${(Math.random() * 2 + 2).toFixed(1)} m³/h`,
+        compressedAirFlowAssembly: `${(Math.random() * 2 + 1).toFixed(1)} m³/h`,
+        vacuumSystemPressure: `${(Math.random() * 0.2 - 0.3).toFixed(1)} bar`,
+        dustCollectionPressure: `${(Math.random() * 2 - 5).toFixed(2)} kPa`,
+        looseEndRejectRate: `${(Math.random() * 0.5 + 0.3).toFixed(2)}%`,
+        oee: `${(Math.random() * 20 + 30).toFixed(1)}%`,
+        airChamberNegativePressure: `${(Math.random() * 0.1 - 0.05).toFixed(3)} MPa`,
+        solderingIronTemperature: `${Math.floor(Math.random() * 100 + 200)}℃`,
+        averageCigaretteWeight: `${(Math.random() * 50 + 50).toFixed(1)}mg`,
+        cutterVibrationAmplitude: `${(Math.random() * 5 + 5).toFixed(1)}mm/s`,
+        gluePumpPressure: `${(Math.random() * 3 + 2).toFixed(1)} bar`,
+        cigaretteLength: `${(Math.random() * 10 + 75).toFixed(1)}mm`,
+        spindleSpeed: `${Math.floor(Math.random() * 1000 + 1000)}rpm`
+      }
+    }
+    
+    // 保存到localStorage
+    localStorage.setItem('currentDeviceParams', JSON.stringify(currentDeviceParams.value))
+    
+    console.log(`[设备监控] ${equipmentName.value} 参数已更新`)
+  }
+
   // 单次状态检查
   const checkDeviceStatus = async (): Promise<void> => {
     if (!isDeviceBound.value || !boundDeviceInfo.value) {
+      return
+    }
+
+    // 检查是否为13#或14#设备，这些设备不请求真实数据
+    if (boundDeviceInfo.value.number === 13 || boundDeviceInfo.value.number === 14) {
+      // 如果是模拟故障状态，不强制设置为运行状态，让模拟故障逻辑生效
+      if (!isSimulatedFault.value) {
+        // 确保设备状态为运行
+        if (deviceStatus.value !== 'running') {
+          deviceStatus.value = 'running'
+          faultName.value = ''
+          localStorage.setItem('deviceStatus', deviceStatus.value)
+          localStorage.setItem('faultName', faultName.value)
+        }
+        
+        // 更新设备参数为运行状态
+        updateDeviceParams()
+      }
+      
+      // 更新统计信息
+      monitoringStats.value.lastCheckTime = new Date().toLocaleTimeString()
+      monitoringStats.value.totalChecks++
+      
+      console.log(`[设备监控] ${equipmentName.value} 为特殊设备，${isSimulatedFault.value ? '当前为模拟故障状态' : '保持正常运行状态'}`)
       return
     }
 
@@ -81,6 +179,9 @@ export function useRealTimeMonitoring(
           deviceStatus.value = 'fault'
           faultName.value = currentFaultName
           
+          // 更新设备参数
+          updateDeviceParams()
+          
           // 保存状态到localStorage
           localStorage.setItem('deviceStatus', deviceStatus.value)
           localStorage.setItem('faultName', faultName.value)
@@ -101,6 +202,10 @@ export function useRealTimeMonitoring(
         } else if (faultName.value !== currentFaultName) {
           // 故障类型发生变化
           faultName.value = currentFaultName
+          
+          // 更新设备参数
+          updateDeviceParams()
+          
           localStorage.setItem('faultName', faultName.value)
           ElMessage.warning(`故障类型变更: ${currentFaultName}`)
           
@@ -123,6 +228,9 @@ export function useRealTimeMonitoring(
           deviceStatus.value = 'running'
           faultName.value = ''
           
+          // 更新设备参数
+          updateDeviceParams()
+          
           // 保存状态到localStorage
           localStorage.setItem('deviceStatus', deviceStatus.value)
           localStorage.setItem('faultName', faultName.value)
@@ -134,6 +242,10 @@ export function useRealTimeMonitoring(
         } else if (deviceStatus.value === 'stopped') {
           // 从停机状态变为运行状态
           deviceStatus.value = 'running'
+          
+          // 更新设备参数
+          updateDeviceParams()
+          
           localStorage.setItem('deviceStatus', deviceStatus.value)
         }
       }
@@ -252,6 +364,7 @@ export function useRealTimeMonitoring(
     stopMonitoring,
     refreshStatus,
     checkDeviceStatus,
-    setSimulatedFault
+    setSimulatedFault,
+    updateDeviceParams
   }
 }

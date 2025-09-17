@@ -38,6 +38,7 @@ async def equ_bending(equname: QueryEquBending):
             result = client.sql(sql)
             if result["data"]:
                 result = result["data"][0][1]
+                logging.info(result)
                 return ResponseEquStatus(equipment_status=result)
         elif "包装机" in equname.equ_name:
             sql = f"SELECT * FROM hysc.s{point_map.point[equname.equ_name]}_60028 order by ts desc limit 1"
