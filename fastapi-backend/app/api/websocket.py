@@ -15,149 +15,204 @@ logging.basicConfig(level=logging.INFO)
 # 创建WebSocket路由器
 websocket_router = APIRouter()
 
+
 # 存储活跃的WebSocket连接
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[str, List[WebSocket]] = {}
+        self.active_connections: Dict[str, WebSocket] = {}
         self.equipment_status_cache: Dict[str, str] = {}
-    
+
     async def connect(self, websocket: WebSocket, equipment_name: str):
         await websocket.accept()
         if equipment_name not in self.active_connections:
-            self.active_connections[equipment_name] = []
-        self.active_connections[equipment_name].append(websocket)
+            self.active_connections[equipment_name] = websocket
         logging.info(f"WebSocket连接已建立，设备: {equipment_name}")
-    
+
     def disconnect(self, websocket: WebSocket, equipment_name: str):
         if equipment_name in self.active_connections:
-            if websocket in self.active_connections[equipment_name]:
-                self.active_connections[equipment_name].remove(websocket)
-            if not self.active_connections[equipment_name]:
-                del self.active_connections[equipment_name]
+            del self.active_connections[equipment_name]
         logging.info(f"WebSocket连接已断开，设备: {equipment_name}")
-    
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-    
-    async def broadcast_to_equipment(self, message: str, equipment_name: str):
+
+    async def send_personal_message(self, message: str, equipment_name: str):
         if equipment_name in self.active_connections:
-            for connection in self.active_connections[equipment_name]:
-                try:
-                    await connection.send_text(message)
-                except:
-                    # 连接可能已经断开，移除它
-                    self.active_connections[equipment_name].remove(connection)
-    
-    def update_status_cache(self, equipment_name: str, status: str):
-        self.equipment_status_cache[equipment_name] = status
-    
-    def get_cached_status(self, equipment_name: str) -> Optional[str]:
-        return self.equipment_status_cache.get(equipment_name)
+            await self.active_connections[equipment_name].send_text(message)
+
+    async def broadcast_to_equipment(self, message: str):
+        for equipment_name, websocket in self.active_connections.items():
+            try:
+                await websocket.send_text(message)
+            except WebSocketDisconnect:
+                # 连接可能已经断开，移除它
+                del self.active_connections[equipment_name]
+
+    # def update_status_cache(self, equipment_name: str, status: str):
+    #     self.equipment_status_cache[equipment_name] = status
+
+    # def get_cached_status(self, equipment_name: str) -> Optional[str]:
+    #     return self.equipment_status_cache.get(equipment_name)
+
 
 manager = ConnectionManager()
 
-async def query_equipment_status(equipment_name: str) -> Optional[ResponseEquStatus]:
-    """
-    查询设备状态，与原有接口逻辑相同
-    """
-    client = None
+
+async def execute_single_query(params, value):
+    client_single = None
     try:
-        client = taosrest.RestClient(
+        client_single = taosrest.RestClient(
             url=tdengine_config.host,
             user=tdengine_config.user,
             password=tdengine_config.password,
             timeout=30,
         )
-        
-        if point_map.point.get(equipment_name) is None:
-            raise HTTPException(status_code=400, detail="设备名称错误！")
-        
-        elif "卷烟机" in equipment_name:
-            sql = f"SELECT * FROM hysc.s{point_map.point[equipment_name]} order by ts desc limit 1"
-            logging.info(sql)
-            result = client.sql(sql)
-            if result["data"]:
-                result = result["data"][0][1]
-                logging.info(result)
-                if result == 1:
-                    return ResponseEquStatus(equipment_status="运行")
-                elif result == 3:
-                    stop_reason = await query_stop_history(
-                        point_map.point[equipment_name].split("_")[0]
-                    )
+        sql = f"SELECT * FROM hysc.s{value} order by ts desc limit 1"
+        logging.info(f"执行查询 {params}: {sql}")
+        result = client_single.sql(sql)
+
+        if result.get("data") and len(result["data"]) > 0:
+            param_value = result["data"][0][1]  # 获取查询结果的值
+            return params, param_value
+        return params, None
+    except Exception as e:
+        logging.error(f"查询参数 {params} 失败: {e}")
+        return params, None
+
+
+async def get_equ_params(equipment_name: str) -> Dict[str, Optional[str]]:
+    """
+    获取设备的所有参数值
+    """
+    if point_map.point.get(equipment_name) is None:
+        raise HTTPException(status_code=400, detail="设备名称错误！")
+
+    params = point_map.point[equipment_name]
+    param_results = {}
+    # 创建所有查询任务
+    tasks = []
+    for params, value in params.items():
+        tasks.append(execute_single_query(params, value))
+    # 并行执行所有查询
+    results = await asyncio.gather(*tasks)
+    # 处理查询结果
+    for param_name, param_value in results:
+        if param_value is not None:
+            param_results[param_name] = param_value
+    return param_results
+
+
+async def query_equipment_params(equipment_name: str):
+    """
+    查询设备状态，与原有接口逻辑相同
+    """
+    try:
+        if "卷烟机" in equipment_name:
+            # 获取设备的所有参数值
+            param_results = await get_equ_params(equipment_name)
+            # logging.info(f"{equipment_name}的参数: {param_results}")
+            # 获取状态值进行设备状态判断（保持与原逻辑一致）
+            if param_results.get("status"):
+                # 获取状态的值
+                if param_results["status"] == 1:
+                    param_results["status"] = "运行"
+                    return param_results
+                elif param_results["status"] == 3:
+                    # 获取设备ID用于查询停机历史
+                    equipment_id = point_map.point[equipment_name]["status"].split("_")[
+                        0
+                    ]
+                    stop_reason = await query_stop_history(equipment_id)
                     logging.info(stop_reason)
                     if stop_reason:
-                        return ResponseEquStatus(
-                            equipment_status=f"发生故障：{stop_reason}"
-                        )
+                        param_results["status"] = stop_reason
                     else:
-                        return ResponseEquStatus(equipment_status="发生故障")
-                return ResponseEquStatus(equipment_status=result)
-        
+                        param_results["status"] = "发生故障:未知"
+                    return param_results
+                # 其他状态值直接返回
+                return param_results
+
+            # 如果没有查询结果，返回默认状态
+            return param_results
+
         elif "包装机" in equipment_name:
-            sql = f"SELECT * FROM hysc.s{point_map.point[equipment_name]}_60028 order by ts desc limit 1"
-            sql1 = f"SELECT * FROM hysc.s{point_map.point[equipment_name]}_60048 order by ts desc limit 1"
-            logging.info(sql)
-            logging.info(sql1)
-            main_mach = client.sql(sql)
-            auxiliary_mach = client.sql(sql1)
-            if main_mach["data"] and auxiliary_mach["data"]:
-                main_mach = main_mach["data"][0][1]
-                auxiliary_mach = auxiliary_mach["data"][0][1]
-                if main_mach == "生产" and auxiliary_mach == "生产":
-                    return ResponseEquStatus(equipment_status="运行")
-                elif main_mach == "生产" and auxiliary_mach != "生产":
-                    return ResponseEquStatus(
-                        equipment_status="辅机故障：" + auxiliary_mach
-                    )
-                elif main_mach != "生产" and auxiliary_mach == "生产":
-                    return ResponseEquStatus(equipment_status="主机故障：" + main_mach)
+
+            param_results = await get_equ_params(equipment_name)
+            # 获取主机和辅机的状态
+            main_status = param_results.get("main_status")
+            auxiliary_status = param_results.get("auxiliary_status")
+            if main_status and auxiliary_status:
+                if main_status == auxiliary_status and main_status in ("生产", "运行"):
+                    del param_results["main_status"]
+                    del param_results["auxiliary_status"]
+                    param_results["status"] = "运行"
+                    return param_results
+                elif (
+                    main_status in ("生产", "运行") and auxiliary_status != main_status
+                ):
+                    del param_results["main_status"]
+                    del param_results["auxiliary_status"]
+                    param_results["status"] = f"辅机故障：{auxiliary_status}"
+                    return param_results
+                elif (
+                    auxiliary_status in ("生产", "运行")
+                    and main_status != auxiliary_status
+                ):
+                    del param_results["main_status"]
+                    del param_results["auxiliary_status"]
+                    param_results["status"] = f"主机故障：{main_status}"
+                    return param_results
                 else:
-                    return ResponseEquStatus(equipment_status=main_mach)
+                    del param_results["main_status"]
+                    del param_results["auxiliary_status"]
+                    param_results["status"] = (
+                        f"主机故障：{main_status},辅机故障：{auxiliary_status}"
+                    )
+                    return param_results
         else:
-            raise HTTPException(status_code=404, detail="数据不存在")
-    
+            raise HTTPException(status_code=400, detail="设备名称错误！")
+
     except Exception as err:
         logging.error(f"查询设备状态失败: {err}")
         return None
-    finally:
-        if client:
-            client.close()
 
-async def equipment_status_monitor(equipment_name: str, interval: int = 2):
+
+async def equipment_monitor(
+    equipment_name: str, websocket: WebSocket, interval: int = 2
+):
     """
     设备状态监控任务，定期查询设备状态并通过WebSocket推送
     """
-    while equipment_name in manager.active_connections:
-        try:
-            # 查询设备状态
-            status_response = await query_equipment_status(equipment_name)
-            
-            if status_response:
-                current_status = status_response.equipment_status
-                cached_status = manager.get_cached_status(equipment_name)
-                
-                # 只有状态发生变化时才推送
-                if cached_status != current_status:
-                    manager.update_status_cache(equipment_name, current_status)
-                    
-                    # 构造消息
-                    message = {
-                        "equipment_name": equipment_name,
-                        "status": current_status,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    
-                    # 广播给所有监听该设备的WebSocket连接
-                    await manager.broadcast_to_equipment(json.dumps(message), equipment_name)
-                    logging.info(f"设备 {equipment_name} 状态更新: {current_status}")
-            
-            # 等待指定间隔后再次查询
-            await asyncio.sleep(interval)
-            
-        except Exception as e:
-            logging.error(f"监控设备 {equipment_name} 状态时出错: {e}")
-            await asyncio.sleep(interval)  # 出错后等待一段时间再继续
+    try:
+        while equipment_name in manager.active_connections:
+            # 检查WebSocket连接是否仍然活跃
+            try:
+                # 发送一个ping消息来检查连接是否仍然活跃
+                await websocket.send_json({"type": "ping"})
+            except Exception:
+                # 如果发送失败，说明连接已经断开
+                logging.info(f"设备 {equipment_name} 的WebSocket连接已断开，停止监控")
+                manager.disconnect(websocket, equipment_name)
+                break
+
+            try:
+                # 查询设备状态
+                param_results = await query_equipment_params(equipment_name)
+                logging.info(f"{equipment_name}的参数: {param_results}")
+                if param_results:
+                    await manager.send_personal_message(
+                        json.dumps(param_results), equipment_name
+                    )
+
+                # 等待指定间隔后再次查询
+                await asyncio.sleep(interval)
+
+            except Exception as e:
+                logging.error(f"监控设备 {equipment_name} 状态时出错: {e}")
+                await asyncio.sleep(interval)  # 出错后等待一段时间再继续
+    except asyncio.CancelledError:
+        logging.info(f"设备 {equipment_name} 的监控任务被取消")
+    except Exception as e:
+        logging.error(f"监控设备 {equipment_name} 时发生未预期的错误: {e}")
+        manager.disconnect(websocket, equipment_name)
+
 
 @websocket_router.websocket("/ws/equipment/{equipment_name}")
 async def websocket_endpoint(websocket: WebSocket, equipment_name: str):
@@ -165,39 +220,12 @@ async def websocket_endpoint(websocket: WebSocket, equipment_name: str):
     WebSocket端点，用于实时推送设备状态
     """
     await manager.connect(websocket, equipment_name)
-    
+    logging.info(f"{equipment_name} 已绑定")
+
     try:
-        # 如果这是第一个连接到此设备的WebSocket，启动监控任务
-        if len(manager.active_connections.get(equipment_name, [])) == 1:
-            asyncio.create_task(equipment_status_monitor(equipment_name))
-        
-        # 保持连接并处理客户端消息
-        while True:
-            try:
-                # 等待客户端消息（可以用于心跳检测或控制命令）
-                data = await websocket.receive_text()
-                message = json.loads(data)
-                
-                # 处理客户端消息
-                if message.get("type") == "ping":
-                    # 心跳响应
-                    await websocket.send_text(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
-                elif message.get("type") == "get_status":
-                    # 客户端请求当前状态
-                    cached_status = manager.get_cached_status(equipment_name)
-                    if cached_status:
-                        await websocket.send_text(json.dumps({
-                            "equipment_name": equipment_name,
-                            "status": cached_status,
-                            "timestamp": datetime.now().isoformat()
-                        }))
-                
-            except WebSocketDisconnect:
-                break
-            except Exception as e:
-                logging.error(f"处理WebSocket消息时出错: {e}")
-                break
-                
+        if equipment_name in manager.active_connections:
+            await equipment_monitor(equipment_name, websocket)
+
     except WebSocketDisconnect:
         manager.disconnect(websocket, equipment_name)
         logging.info(f"设备 {equipment_name} 的WebSocket连接已断开")

@@ -9,4 +9,4 @@ class QueryEquBending(BaseModel):
 
 
 class ResponseEquStatus(BaseModel):
-    equipment_status: str
+    equipment_status: Dict[str, Any]

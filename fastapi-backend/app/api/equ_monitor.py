@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from multiprocessing import managers
+from fastapi import APIRouter, HTTPException, WebSocket
 from typing import List, Optional
 from datetime import datetime, time
 from fastapi import APIRouter, HTTPException
@@ -17,7 +18,7 @@ from schemas.equ_bending import *
 equ_bending_router = APIRouter()
 
 
-def query_stop_history(mch_code: str) -> Optional[str]:
+async def query_stop_history(mch_code: str) -> Optional[str]:
     """
     查询设备停机历史记录
 
@@ -86,7 +87,7 @@ async def equ_bending(equname: QueryEquBending):
             raise HTTPException(status_code=400, detail="设备名称错误！")
         elif "卷烟机" in equname.equ_name:
 
-            sql = f"SELECT * FROM hysc.s{point_map.point[equname.equ_name]} order by ts desc limit 1"
+            sql = f"SELECT * FROM hysc.s{point_map.point[equname.equ_name]['status']} order by ts desc limit 1"
             logging.info(sql)
             result = client.sql(sql)
             if result["data"]:
@@ -107,8 +108,8 @@ async def equ_bending(equname: QueryEquBending):
                         return ResponseEquStatus(equipment_status="发生故障")
                 return ResponseEquStatus(equipment_status=result)
         elif "包装机" in equname.equ_name:
-            sql = f"SELECT * FROM hysc.s{point_map.point[equname.equ_name]}_60028 order by ts desc limit 1"
-            sql1 = f"SELECT * FROM hysc.s{point_map.point[equname.equ_name]}_60048 order by ts desc limit 1"
+            sql = f"SELECT * FROM hysc.s{point_map.point[equname.equ_name]['status']}_60028 order by ts desc limit 1"
+            sql1 = f"SELECT * FROM hysc.s{point_map.point[equname.equ_name]['status']}_60048 order by ts desc limit 1"
             logging.info(sql)
             logging.info(sql1)
             main_mach = client.sql(sql)

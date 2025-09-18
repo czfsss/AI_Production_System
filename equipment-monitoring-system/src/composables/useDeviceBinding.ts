@@ -75,13 +75,11 @@ export function useDeviceBinding(
   // 初始化实时监控
   const {
     isMonitoring,
-    currentInterval,
     monitoringStats,
     equipmentName,
     startMonitoring,
     stopMonitoring,
     refreshStatus,
-    checkDeviceStatus,
     setSimulatedFault,
     updateDeviceParams
   } = useRealTimeMonitoring(
@@ -246,13 +244,11 @@ export function useDeviceBinding(
     getStatusClass,
     // 实时监控相关
     isMonitoring,
-    currentInterval,
     monitoringStats,
     equipmentName,
     startMonitoring,
     stopMonitoring,
     refreshStatus,
-    checkDeviceStatus,
     updateDeviceParams,
     simulateDeviceFault
   }

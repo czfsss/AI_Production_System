@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 测试页面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card-title {
+            font-size: 1.4rem;
+            color: #3498db;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        select,
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            font-size: 1rem;
+        }
+
+        select {
+            background-color: #f9f9f9;
+            cursor: pointer;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .disconnect-btn {
+            background-color: #e74c3c;
+        }
+
+        .disconnect-btn:hover {
+            background-color: #c0392b;
+        }
+
+        .status-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background-color: #e74c3c;
+        }
+
+        .status-indicator.connected {
+            background-color: #2ecc71;
+        }
+
+        .status-text {
+            font-weight: 600;
+        }
+
+        .log-container {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .log-entry {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-entry::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #3498db;
+            font-weight: bold;
+        }
+
+        .timestamp {
+            color: #7f8c8d;
+            font-size: 0.8rem;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .content {
+            color: #2c3e50;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .log-entry.success .content {
+            color: #27ae60;
+        }
+
+        .log-entry.error .content {
+            color: #e74c3c;
+        }
+
+        .log-entry.info .content {
+            color: #3498db;
+        }
+
+        .log-entry.warning .content {
+            color: #f39c12;
+        }
+
+        .clear-btn {
+            background-color: #95a5a6;
+            margin-top: 10px;
+        }
+
+        .clear-btn:hover {
+            background-color: #7f8c8d;
+        }
+
+        .current-equipment {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #ecf0f1;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .equipment-type {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 10px;
+            font-weight: normal;
+        }
+
+        .equipment-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+            border: 1px solid #eee;
+        }
+
+        .equipment-item.selected {
+            background-color: #e3f2fd;
+            border-color: #3498db;
+        }
+
+        .equipment-checkbox {
+            margin-right: 10px;
+        }
+
+        .equipment-name {
+            flex-grow: 1;
+        }
+
+        .equipment-type {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: normal;
+        }
+
+        .cigarette {
+            background-color: #f39c12;
+            color: white;
+        }
+
+        .packaging {
+            background-color: #9b59b6;
+            color: white;
+        }
+
+        .selected-equipments {
+            margin-top: 15px;
+        }
+        
+        /* 水平布局样式 */
+        .horizontal-layout {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+        }
+        
+        .device-selection {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .connection-control {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* 弹窗样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 0;
+            border: 1px solid #888;
+            width: 50%;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .modal-header {
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: #333;
+        }
+        
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+        }
+        
+        .modal-body {
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .modal-footer {
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            text-align: right;
+        }
+        
+        .modal-footer button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .modal-footer button:hover {
+            background-color: #45a049;
+        }
+        
+        /* 已选设备列表样式 */
+        #selectedEquipmentsList {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .selected-equipment-item {
+            padding: 8px 12px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .equipment-type {
+            margin-left: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .equipment-type.cigarette {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .equipment-type.packaging {
+            background-color: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .connection-status-text {
+            margin-left: 10px;
+            font-size: 14px;
+        }
+        
+        .connection-status-text.connected {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        .connection-status-text.disconnected {
+            color: #f44336;
+        }
+        
+        /* 响应式布局调整 */
+        @media (max-width: 768px) {
+            .horizontal-layout {
+                flex-direction: column;
+            }
+            
+            .device-selection,
+            .connection-control {
+                min-width: 100%;
+            }
+            
+            .modal-content {
+                width: 80%;
+            }
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            margin-top: 15px;
+        }
+
+        .connection-status-item {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+            margin-bottom: 10px;
+        }
+
+        .status-indicator-small {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background-color: #e74c3c;
+        }
+
+        .status-indicator-small.connected {
+            background-color: #2ecc71;
+        }
+
+        .status-text-small {
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .batch-connect-btn {
+            background-color: #27ae60;
+            margin-top: 10px;
+        }
+
+        .batch-connect-btn:hover {
+            background-color: #219653;
+        }
+
+        .batch-disconnect-btn {
+            background-color: #e74c3c;
+            margin-top: 10px;
+        }
+
+        .batch-disconnect-btn:hover {
+            background-color: #c0392b;
+        }
+
+        .main-content {
+            display: flex;
+            gap: 25px;
+            margin-top: 10px;
+        }
+
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .right-panel {
+            flex: 1.5;
+        }
+
+        @media (max-width: 992px) {
+            .main-content {
+                flex-direction: column;
+            }
+
+            .right-panel {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>WebSocket 设备监控测试</h1>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="card">
+                    <h2 class="card-title">设备选择与连接控制</h2>
+                    
+                    <div class="horizontal-layout">
+                        <!-- 左侧：设备选择 -->
+                        <div class="device-selection">
+                            <div class="form-group">
+                                <label>请选择要监控的设备：</label>
+                                <div id="equipmentList" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 10px;">
+                                    <!-- 设备列表将通过JavaScript动态生成 -->
+                                </div>
+                                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                    <button id="selectAllButton" type="button">全选</button>
+                                    <button id="deselectAllButton" type="button">取消全选</button>
+                                    <button id="viewSelectedButton" type="button">查看已选设备</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 右侧：连接控制 -->
+                        <div class="connection-control">
+                            <div class="form-group">
+                                <label>连接控制</label>
+                                <div class="status-container">
+                                    <span class="status-indicator" id="statusIndicator"></span>
+                                    <span class="status-text" id="statusText">未连接</span>
+                                </div>
+                                <div class="current-equipment" id="currentEquipment">未选择设备</div>
+                                <div class="connection-status" id="connectionStatus">
+                                    <!-- 各设备连接状态将通过JavaScript动态生成 -->
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 10px;">
+                                    <button id="connectionButton" disabled>连接</button>
+                                    <button id="batchConnectButton" class="batch-connect-btn" disabled>批量连接</button>
+                                    <button id="batchDisconnectButton" class="batch-disconnect-btn" disabled>批量断开</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="card">
+                    <h2 class="card-title">消息日志</h2>
+                    <div class="log-container" id="logContainer">
+                        <!-- 日志条目将通过JavaScript动态添加 -->
+                    </div>
+                    <button id="clearButton" class="clear-btn">清空日志</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 已选设备弹窗 -->
+    <div id="selectedEquipmentsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>已选择的设备</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="selectedEquipmentsList">
+                    <!-- 已选择的设备将通过JavaScript动态生成 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="closeModalButton">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 设备配置映射
+        const pointMap = {
+            "01#卷烟机": { "status": "83020000219_60010", type: "cigarette" },
+            "02#卷烟机": { "status": "83020000218_60010", type: "cigarette" },
+            "04#卷烟机": { "status": "83020000005_60007", type: "cigarette" },
+            "05#卷烟机": { "status": "83020000006_60007", type: "cigarette" },
+            "06#卷烟机": { "status": "83020000007_60007", type: "cigarette" },
+            "07#卷烟机": { "status": "83020000008_60007", type: "cigarette" },
+            "08#卷烟机": { "status": "83020000225_60010", type: "cigarette" },
+            "09#卷烟机": { "status": "83020000226_60010", type: "cigarette" },
+            "10#卷烟机": { "status": "83020000210_60010", type: "cigarette" },
+            "11#卷烟机": { "status": "83020000211_60010", type: "cigarette" },
+            "12#卷烟机": { "status": "83020000217_60010", type: "cigarette" },
+            "13#卷烟机": { "status": "83020000216_60010", type: "cigarette" },
+            "14#卷烟机": { "status": "83020000209_60010", type: "cigarette" },
+            "15#卷烟机": { "status": "83020000208_60010", type: "cigarette" },
+            "16#卷烟机": { "status": "83020000198_60010", type: "cigarette" },
+            "17#卷烟机": { "status": "83020000197_60010", type: "cigarette" },
+            "18#卷烟机": { "status": "83020000169_60010", type: "cigarette" },
+            "19#卷烟机": { "status": "83020000170_60010", type: "cigarette" },
+            "20#卷烟机": { "status": "83020000220_60010", type: "cigarette" },
+            "21#卷烟机": { "status": "83020000227_60010", type: "cigarette" },
+            "22#卷烟机": { "status": "83020000212_60010", type: "cigarette" },
+            "01#包装机": {
+                "main_status": "83020000157_60028",
+                "auxiliary_status": "83020000157_60048",
+                type: "packaging"
+            },
+            "02#包装机": {
+                "main_status": "83020000156_60028",
+                "auxiliary_status": "83020000156_60048",
+                type: "packaging"
+            },
+            "03#包装机": {
+                "main_status": "83020000157_60028",
+                "auxiliary_status": "83020000157_60048",
+                type: "packaging"
+            },
+            "04#包装机": {
+                "main_status": "83020000014_60028",
+                "auxiliary_status": "83020000014_60048",
+                type: "packaging"
+            },
+            "05#包装机": {
+                "main_status": "83020000015_60028",
+                "auxiliary_status": "83020000015_60048",
+                type: "packaging"
+            },
+            "06#包装机": {
+                "main_status": "83020000016_60028",
+                "auxiliary_status": "83020000016_60048",
+                type: "packaging"
+            },
+            "07#包装机": {
+                "main_status": "83020000017_60028",
+                "auxiliary_status": "83020000017_60048",
+                type: "packaging"
+            },
+            "08#包装机": {
+                "main_status": "83020000166_60028",
+                "auxiliary_status": "83020000166_60048",
+                type: "packaging"
+            },
+            "09#包装机": {
+                "main_status": "83020000163_60028",
+                "auxiliary_status": "83020000163_60048",
+                type: "packaging"
+            },
+            "10#包装机": {
+                "main_status": "83020000151_60028",
+                "auxiliary_status": "83020000151_60048",
+                type: "packaging"
+            },
+            "11#包装机": {
+                "main_status": "83020000152_60028",
+                "auxiliary_status": "83020000152_60048",
+                type: "packaging"
+            },
+            "12#包装机": {
+                "main_status": "83020000155_60028",
+                "auxiliary_status": "83020000155_60048",
+                type: "packaging"
+            },
+            "13#包装机": {
+                "main_status": "83020000154_60028",
+                "auxiliary_status": "83020000154_60048",
+                type: "packaging"
+            },
+            "14#包装机": {
+                "main_status": "83020000150_60028",
+                "auxiliary_status": "83020000150_60048",
+                type: "packaging"
+            },
+            "15#包装机": {
+                "main_status": "83020000149_60028",
+                "auxiliary_status": "83020000149_60048",
+                type: "packaging"
+            },
+            "16#包装机": {
+                "main_status": "83020000143_60028",
+                "auxiliary_status": "83020000143_60048",
+                type: "packaging"
+            },
+            "17#包装机": {
+                "main_status": "83020000142_60028",
+                "auxiliary_status": "83020000142_60048",
+                type: "packaging"
+            },
+            "18#包装机": {
+                "main_status": "83020000126_60028",
+                "auxiliary_status": "83020000126_60048",
+                type: "packaging"
+            },
+            "19#包装机": {
+                "main_status": "83020000127_60028",
+                "auxiliary_status": "83020000127_60048",
+                type: "packaging"
+            },
+            "20#包装机": {
+                "main_status": "83020000158_60028",
+                "auxiliary_status": "83020000158_60048",
+                type: "packaging"
+            },
+            "21#包装机": {
+                "main_status": "83020000165_60028",
+                "auxiliary_status": "83020000165_60048",
+                type: "packaging"
+            },
+            "22#包装机": {
+                "main_status": "83020000153_60028",
+                "auxiliary_status": "83020000153_60048",
+                type: "packaging"
+            },
+        };
+
+        // DOM元素
+const equipmentList = document.getElementById('equipmentList');
+const selectAllButton = document.getElementById('selectAllButton');
+const deselectAllButton = document.getElementById('deselectAllButton');
+const viewSelectedButton = document.getElementById('viewSelectedButton');
+const selectedEquipmentsModal = document.getElementById('selectedEquipmentsModal');
+const selectedEquipmentsList = document.getElementById('selectedEquipmentsList');
+const closeModalButton = document.getElementById('closeModalButton');
+const modalClose = document.querySelector('.close');
+const statusIndicator = document.getElementById('statusIndicator');
+const statusText = document.getElementById('statusText');
+const currentEquipment = document.getElementById('currentEquipment');
+const connectionStatus = document.getElementById('connectionStatus');
+const connectionButton = document.getElementById('connectionButton');
+const batchConnectButton = document.getElementById('batchConnectButton');
+const batchDisconnectButton = document.getElementById('batchDisconnectButton');
+const logContainer = document.getElementById('logContainer');
+const clearButton = document.getElementById('clearButton');
+
+        // WebSocket连接状态
+        let selectedEquipmentsMap = new Map(); // 存储选中的设备及其连接状态
+        let websocketConnections = new Map(); // 存储设备对应的WebSocket连接
+
+        // 初始化设备列表
+        function initializeEquipmentList() {
+            // 创建分组
+            const cigaretteGroup = document.createElement('div');
+            cigaretteGroup.innerHTML = '<h3 style="margin: 10px 0; color: #3498db;">卷烟机</h3>';
+
+            const packagingGroup = document.createElement('div');
+            packagingGroup.innerHTML = '<h3 style="margin: 10px 0; color: #9b59b6;">包装机</h3>';
+
+            // 添加设备选项到对应分组
+            for (const [name, config] of Object.entries(pointMap)) {
+                const equipmentItem = document.createElement('div');
+                equipmentItem.className = 'equipment-item';
+                equipmentItem.dataset.equipmentName = name;
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'equipment-checkbox';
+                checkbox.dataset.equipmentName = name;
+
+                const equipmentName = document.createElement('span');
+                equipmentName.className = 'equipment-name';
+                equipmentName.textContent = name;
+
+                const equipmentType = document.createElement('span');
+                equipmentType.className = `equipment-type ${config.type}`;
+                equipmentType.textContent = config.type === 'cigarette' ? '卷烟机' : '包装机';
+
+                equipmentItem.appendChild(checkbox);
+                equipmentItem.appendChild(equipmentName);
+                equipmentItem.appendChild(equipmentType);
+
+                // 添加点击事件
+                equipmentItem.addEventListener('click', function(e) {
+                    if (e.target.type !== 'checkbox') {
+                        checkbox.checked = !checkbox.checked;
+                    }
+                    toggleEquipmentSelection(name, checkbox.checked);
+                });
+
+                checkbox.addEventListener('change', function() {
+                    toggleEquipmentSelection(name, checkbox.checked);
+                });
+
+                if (config.type === 'cigarette') {
+                    cigaretteGroup.appendChild(equipmentItem);
+                } else if (config.type === 'packaging') {
+                    packagingGroup.appendChild(equipmentItem);
+                }
+            }
+
+            // 添加分组到设备列表
+            equipmentList.appendChild(cigaretteGroup);
+            equipmentList.appendChild(packagingGroup);
+        }
+
+        // 切换设备选择状态
+function toggleEquipmentSelection(equipmentName, isSelected) {
+    const equipmentItem = document.querySelector(`.equipment-item[data-equipment-name="${equipmentName}"]`);
+    
+    if (isSelected) {
+        selectedEquipmentsMap.set(equipmentName, false); // false表示未连接
+        equipmentItem.classList.add('selected');
+    } else {
+        selectedEquipmentsMap.delete(equipmentName);
+        equipmentItem.classList.remove('selected');
+        
+        // 如果设备已连接，断开连接
+        if (websocketConnections.has(equipmentName)) {
+            disconnectWebSocket(equipmentName);
+        }
+    }
+    
+    updateUI();
+}
+
+        // 更新UI状态
+        function updateUI() {
+            const selectedCount = selectedEquipmentsMap.size;
+            const connectedCount = Array.from(selectedEquipmentsMap.values()).filter(status => status).length;
+            
+            if (selectedCount === 0) {
+                currentEquipment.textContent = '未选择设备';
+                connectionButton.disabled = true;
+                batchConnectButton.disabled = true;
+                batchDisconnectButton.disabled = true;
+                statusIndicator.classList.remove('connected');
+                statusText.textContent = '未连接';
+            } else {
+                currentEquipment.textContent = `已选择 ${selectedCount} 台设备，${connectedCount} 台已连接`;
+                
+                // 如果有选中的设备，启用批量连接按钮
+                batchConnectButton.disabled = false;
+                
+                // 如果有已连接的设备，启用批量断开按钮
+                batchDisconnectButton.disabled = connectedCount === 0;
+                
+                // 如果只选择了一个设备，启用单个连接按钮
+                connectionButton.disabled = false;
+                
+                // 如果所有选中的设备都已连接，更新整体状态
+                if (selectedCount > 0 && connectedCount === selectedCount) {
+                    statusIndicator.classList.add('connected');
+                    statusText.textContent = '全部已连接';
+                } else if (connectedCount > 0) {
+                    statusIndicator.classList.add('connected');
+                    statusText.textContent = `部分已连接 (${connectedCount}/${selectedCount})`;
+                } else {
+                    statusIndicator.classList.remove('connected');
+                    statusText.textContent = '未连接';
+                }
+            }
+            
+            updateConnectionStatus();
+        }
+
+        // 更新连接状态显示
+        function updateConnectionStatus() {
+            // 清空连接状态区域
+            connectionStatus.innerHTML = '';
+            
+            // 不显示任何内容
+        }
+
+        // 全选所有设备
+        function selectAllEquipments() {
+            const checkboxes = document.querySelectorAll('.equipment-checkbox');
+            checkboxes.forEach(checkbox => {
+                if (!checkbox.checked) {
+                    checkbox.checked = true;
+                    const equipmentName = checkbox.dataset.equipmentName;
+                    toggleEquipmentSelection(equipmentName, true);
+                }
+            });
+            addLog('已选择所有设备');
+        }
+
+        // 取消全选所有设备
+        function deselectAllEquipments() {
+            const checkboxes = document.querySelectorAll('.equipment-checkbox');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    checkbox.checked = false;
+                    const equipmentName = checkbox.dataset.equipmentName;
+                    toggleEquipmentSelection(equipmentName, false);
+                }
+            });
+            addLog('已取消选择所有设备');
+        }
+
+        // 显示已选设备弹窗
+        function showSelectedEquipmentsModal() {
+            // 清空已选设备列表
+            selectedEquipmentsList.innerHTML = '';
+            
+            // 如果没有选中的设备，显示提示信息
+            if (selectedEquipmentsMap.size === 0) {
+                const noSelectionItem = document.createElement('div');
+                noSelectionItem.className = 'selected-equipment-item';
+                noSelectionItem.textContent = '尚未选择任何设备';
+                selectedEquipmentsList.appendChild(noSelectionItem);
+            } else {
+                // 添加所有选中的设备到列表
+                for (const [equipmentName, isConnected] of selectedEquipmentsMap) {
+                    const config = pointMap[equipmentName];
+                    const selectedItem = document.createElement('div');
+                    selectedItem.className = 'selected-equipment-item';
+                    
+                    const equipmentNameSpan = document.createElement('span');
+                    equipmentNameSpan.textContent = equipmentName;
+                    
+                    const equipmentType = document.createElement('span');
+                    equipmentType.className = `equipment-type ${config.type}`;
+                    equipmentType.textContent = config.type === 'cigarette' ? '卷烟机' : '包装机';
+                    
+                    const connectionStatus = document.createElement('span');
+                    connectionStatus.className = `connection-status-text ${isConnected ? 'connected' : 'disconnected'}`;
+                    connectionStatus.textContent = isConnected ? '已连接' : '未连接';
+                    
+                    const removeButton = document.createElement('button');
+                    removeButton.textContent = '移除';
+                    removeButton.style.marginLeft = '10px';
+                    removeButton.style.padding = '2px 8px';
+                    removeButton.style.backgroundColor = '#e74c3c';
+                    removeButton.style.color = 'white';
+                    removeButton.style.border = 'none';
+                    removeButton.style.borderRadius = '4px';
+                    removeButton.style.cursor = 'pointer';
+                    removeButton.addEventListener('click', function() {
+                        const checkbox = document.querySelector(`.equipment-checkbox[data-equipment-name="${equipmentName}"]`);
+                        checkbox.checked = false;
+                        toggleEquipmentSelection(equipmentName, false);
+                        // 刷新弹窗内容
+                        showSelectedEquipmentsModal();
+                    });
+                    
+                    selectedItem.appendChild(equipmentNameSpan);
+                    selectedItem.appendChild(equipmentType);
+                    selectedItem.appendChild(connectionStatus);
+                    selectedItem.appendChild(removeButton);
+                    
+                    selectedEquipmentsList.appendChild(selectedItem);
+                }
+            }
+            
+            // 显示弹窗
+            selectedEquipmentsModal.style.display = 'block';
+        }
+
+        // 关闭已选设备弹窗
+        function closeSelectedEquipmentsModal() {
+            selectedEquipmentsModal.style.display = 'none';
+        }
+
+        // 切换单个设备连接状态
+        function toggleConnection() {
+            // 如果只选择了一个设备，使用单个设备连接逻辑
+            if (selectedEquipmentsMap.size === 1) {
+                const equipmentName = Array.from(selectedEquipmentsMap.keys())[0];
+                const isConnected = selectedEquipmentsMap.get(equipmentName);
+                
+                if (isConnected) {
+                    disconnectWebSocket(equipmentName);
+                } else {
+                    connectWebSocket(equipmentName);
+                }
+            }
+        }
+
+        // 批量连接所有选中的设备
+        function batchConnect() {
+            for (const [equipmentName, isConnected] of selectedEquipmentsMap) {
+                if (!isConnected) {
+                    connectWebSocket(equipmentName);
+                }
+            }
+        }
+
+        // 批量断开所有已连接的设备
+        function batchDisconnect() {
+            for (const [equipmentName, isConnected] of selectedEquipmentsMap) {
+                if (isConnected) {
+                    disconnectWebSocket(equipmentName);
+                }
+            }
+        }
+
+        // 连接单个设备的WebSocket
+        function connectWebSocket(equipmentName) {
+            if (!equipmentName || selectedEquipmentsMap.get(equipmentName)) return;
+
+            // WebSocket URL
+            const wsUrl = `ws://localhost:8000/api/ws/equipment/${encodeURIComponent(equipmentName)}`;
+
+            try {
+                const websocket = new WebSocket(wsUrl);
+                websocketConnections.set(equipmentName, websocket);
+
+                websocket.onopen = () => {
+                    selectedEquipmentsMap.set(equipmentName, true);
+                    updateUI();
+                    addLog(`[${equipmentName}] WebSocket 连接已建立: ${wsUrl}`);
+                    console.log(`[${equipmentName}] WebSocket连接已建立`);
+
+                    // 添加一个测试消息，检查连接是否正常工作
+                    setTimeout(() => {
+                        if (websocket && websocket.readyState === WebSocket.OPEN) {
+                            addLog(`[${equipmentName}] 连接已建立5秒，未收到数据，可能服务端没有推送数据`);
+                            console.log(`[${equipmentName}] 连接已建立5秒，未收到数据`);
+                        }
+                    }, 5000);
+                };
+
+                websocket.onmessage = (event) => {
+                    console.log(`[${equipmentName}] 收到原始消息:`, event);
+                    
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log(`[${equipmentName}] 解析后的数据:`, data);
+                        addLog(`[${equipmentName}] 解析后的数据: ${JSON.stringify(data, null, 2)}`);
+
+                        // 显示数据类型和内容
+                        if (typeof data === 'object') {
+                            addLog(`[${equipmentName}] 数据类型: 对象，包含 ${Object.keys(data).length} 个属性`);
+                            for (const [key, value] of Object.entries(data)) {
+                                addLog(`[${equipmentName}] 属性 ${key}: ${value} (类型: ${typeof value})`);
+                            }
+                        } else {
+                            addLog(`[${equipmentName}] 数据类型: ${typeof data}, 值: ${data}`);
+                        }
+                    } catch (e) {
+                        console.error(`[${equipmentName}] 解析JSON失败:`, e);
+                        addLog(`[${equipmentName}] 解析JSON失败: ${e.message}`);
+                    }
+                };
+
+                websocket.onclose = () => {
+                    selectedEquipmentsMap.set(equipmentName, false);
+                    websocketConnections.delete(equipmentName);
+                    updateUI();
+                    addLog(`[${equipmentName}] WebSocket 连接已关闭`);
+                };
+
+                websocket.onerror = (error) => {
+                    addLog(`[${equipmentName}] WebSocket 错误: ${error.message || '未知错误'}`);
+                };
+            } catch (error) {
+                addLog(`[${equipmentName}] 连接失败: ${error.message}`);
+            }
+        }
+
+        // 断开单个设备的WebSocket连接
+        function disconnectWebSocket(equipmentName) {
+            const websocket = websocketConnections.get(equipmentName);
+            if (websocket) {
+                websocket.close();
+                websocketConnections.delete(equipmentName);
+                selectedEquipmentsMap.set(equipmentName, false);
+                updateUI();
+            }
+        }
+
+        // 添加日志
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+
+            // 根据消息内容判断日志类型
+            if (message.includes('错误') || message.includes('失败') || message.includes('解析失败') || message.includes('WebSocket 错误')) {
+                logEntry.classList.add('error');
+            } else if (message.includes('连接已建立') || message.includes('已连接') || message.includes('已选择设备')) {
+                logEntry.classList.add('success');
+            } else if (message.includes('连接已关闭') || message.includes('未收到数据') || message.includes('未连接')) {
+                logEntry.classList.add('warning');
+            } else {
+                logEntry.classList.add('info');
+            }
+
+            logEntry.innerHTML = `
+                <div class="timestamp">${timestamp}</div>
+                <div class="content">${message}</div>
+            `;
+
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // 限制日志数量，避免内存占用过多
+            if (logContainer.children.length > 100) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        // 清空日志
+        function clearLog() {
+            logContainer.innerHTML = '';
+        }
+
+        // 添加事件监听器
+document.addEventListener('DOMContentLoaded', () => {
+    // 初始化设备列表
+    initializeEquipmentList();
+
+    // 连接按钮点击事件
+    connectionButton.addEventListener('click', toggleConnection);
+
+    // 批量连接按钮点击事件
+    batchConnectButton.addEventListener('click', batchConnect);
+
+    // 批量断开按钮点击事件
+    batchDisconnectButton.addEventListener('click', batchDisconnect);
+
+    // 全选按钮点击事件
+    selectAllButton.addEventListener('click', selectAllEquipments);
+
+    // 取消全选按钮点击事件
+    deselectAllButton.addEventListener('click', deselectAllEquipments);
+
+    // 清除日志按钮点击事件
+    clearButton.addEventListener('click', clearLog);
+    
+    // 查看已选设备按钮点击事件
+    viewSelectedButton.addEventListener('click', showSelectedEquipmentsModal);
+    
+    // 关闭弹窗按钮点击事件
+    closeModalButton.addEventListener('click', closeSelectedEquipmentsModal);
+    modalClose.addEventListener('click', closeSelectedEquipmentsModal);
+    
+    // 点击弹窗外部区域关闭弹窗
+    window.addEventListener('click', function(event) {
+        if (event.target === selectedEquipmentsModal) {
+            closeSelectedEquipmentsModal();
+        }
+    });
+
+    addLog('WebSocket 测试页面已加载');
+});
+    </script>
+</body>
+
+</html>

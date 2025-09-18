@@ -1,11 +1,12 @@
 import { ref, computed, watch, onUnmounted, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { 
-  queryEquipmentStatus, 
   formatEquipmentName, 
   isEquipmentFaulty, 
   extractFaultName 
 } from '../services/equipmentMonitor'
+import { createWebSocketService } from '../services/websocket'
+import { API_CONFIG } from '../config/api'
 
 interface BoundDeviceInfo {
   type: string
@@ -26,17 +27,15 @@ export function useRealTimeMonitoring(
   const isSimulatedFault = ref(false)
   // 监控状态
   const isMonitoring = ref(false)
-  const monitoringInterval = ref<number | null>(null)
-  const currentInterval = ref(2000) // 当前监控间隔（毫秒）
-  const normalInterval = 2000 // 正常状态下2秒查询一次
-  const faultInterval = 5000 // 故障状态下5秒查询一次
+  const wsService = createWebSocketService(API_CONFIG.baseURL.replace('http', 'ws'))
   
   // 监控统计
   const monitoringStats = ref({
     lastCheckTime: '',
     totalChecks: 0,
     consecutiveFaults: 0,
-    consecutiveRunning: 0
+    consecutiveRunning: 0,
+    connectionStatus: '未连接'
   })
 
   // 计算设备名称
@@ -118,13 +117,13 @@ export function useRealTimeMonitoring(
     console.log(`[设备监控] ${equipmentName.value} 参数已更新`)
   }
 
-  // 单次状态检查
-  const checkDeviceStatus = async (): Promise<void> => {
+  // 处理WebSocket消息
+  const handleWebSocketMessage = (data: any) => {
     if (!isDeviceBound.value || !boundDeviceInfo.value) {
       return
     }
 
-    // 检查是否为13#或14#设备，这些设备不请求真实数据
+    // 检查是否为13#或14#设备，这些设备不处理真实数据
     if (boundDeviceInfo.value.number === 13 || boundDeviceInfo.value.number === 14) {
       // 如果是模拟故障状态，不强制设置为运行状态，让模拟故障逻辑生效
       if (!isSimulatedFault.value) {
@@ -152,154 +151,152 @@ export function useRealTimeMonitoring(
     if (isSimulatedFault.value) {
       monitoringStats.value.lastCheckTime = new Date().toLocaleTimeString()
       monitoringStats.value.totalChecks++
-      console.log(`[设备监控] ${equipmentName.value} 当前为模拟故障状态，跳过API状态更新`)
+      console.log(`[设备监控] ${equipmentName.value} 当前为模拟故障状态，跳过WebSocket状态更新`)
       return
     }
 
-    try {
-      const response = await queryEquipmentStatus(equipmentName.value)
-      const status = response.equipment_status
+    // 从WebSocket消息中获取设备状态
+    const status = data.status || '未知状态'
+    
+    // 更新统计信息
+    monitoringStats.value.lastCheckTime = new Date().toLocaleTimeString()
+    monitoringStats.value.totalChecks++
+    
+    console.log(`[设备监控] ${equipmentName.value} 状态: ${status}`)
+    
+    const isFaulty = isEquipmentFaulty(status)
+    const currentFaultName = extractFaultName(status)
+    
+    if (isFaulty) {
+      // 设备故障
+      monitoringStats.value.consecutiveFaults++
+      monitoringStats.value.consecutiveRunning = 0
       
-      // 更新统计信息
-      monitoringStats.value.lastCheckTime = new Date().toLocaleTimeString()
-      monitoringStats.value.totalChecks++
-      
-      console.log(`[设备监控] ${equipmentName.value} 状态: ${status}`)
-      
-      const isFaulty = isEquipmentFaulty(status)
-      const currentFaultName = extractFaultName(status)
-      
-      if (isFaulty) {
-        // 设备故障
-        monitoringStats.value.consecutiveFaults++
-        monitoringStats.value.consecutiveRunning = 0
+      if (deviceStatus.value !== 'fault') {
+        // 新故障发生
+        deviceStatus.value = 'fault'
+        faultName.value = currentFaultName
         
-        if (deviceStatus.value !== 'fault') {
-          // 新故障发生
-          deviceStatus.value = 'fault'
-          faultName.value = currentFaultName
-          
-          // 更新设备参数
-          updateDeviceParams()
-          
-          // 保存状态到localStorage
-          localStorage.setItem('deviceStatus', deviceStatus.value)
-          localStorage.setItem('faultName', faultName.value)
-          
-          ElMessage.error(`设备发生故障: ${currentFaultName}`)
-          
-          // 切换到故障监控间隔
-          updateMonitoringInterval(faultInterval)
-          
-          // 触发AI分析
-          if (onFaultDetected) {
-            try {
-              await onFaultDetected()
-            } catch (error) {
-              console.warn('自动故障分析失败:', error)
-            }
-          }
-        } else if (faultName.value !== currentFaultName) {
-          // 故障类型发生变化
-          faultName.value = currentFaultName
-          
-          // 更新设备参数
-          updateDeviceParams()
-          
-          localStorage.setItem('faultName', faultName.value)
-          ElMessage.warning(`故障类型变更: ${currentFaultName}`)
-          
-          // 重新触发AI分析
-          if (onFaultDetected) {
-            try {
-              await onFaultDetected()
-            } catch (error) {
-              console.warn('自动故障分析失败:', error)
-            }
+        // 更新设备参数
+        updateDeviceParams()
+        
+        // 保存状态到localStorage
+        localStorage.setItem('deviceStatus', deviceStatus.value)
+        localStorage.setItem('faultName', faultName.value)
+        
+        ElMessage.error(`设备发生故障: ${currentFaultName}`)
+        
+        // 触发AI分析
+        if (onFaultDetected) {
+          try {
+            onFaultDetected()
+          } catch (error) {
+            console.warn('自动故障分析失败:', error)
           }
         }
-      } else {
-        // 设备正常运行
-        monitoringStats.value.consecutiveRunning++
-        monitoringStats.value.consecutiveFaults = 0
+      } else if (faultName.value !== currentFaultName) {
+        // 故障类型发生变化
+        faultName.value = currentFaultName
         
-        if (deviceStatus.value === 'fault') {
-          // 从故障状态恢复
-          deviceStatus.value = 'running'
-          faultName.value = ''
-          
-          // 更新设备参数
-          updateDeviceParams()
-          
-          // 保存状态到localStorage
-          localStorage.setItem('deviceStatus', deviceStatus.value)
-          localStorage.setItem('faultName', faultName.value)
-          
-          ElMessage.success('设备已恢复正常运行')
-          
-          // 切换回正常监控间隔
-          updateMonitoringInterval(normalInterval)
-        } else if (deviceStatus.value === 'stopped') {
-          // 从停机状态变为运行状态
-          deviceStatus.value = 'running'
-          
-          // 更新设备参数
-          updateDeviceParams()
-          
-          localStorage.setItem('deviceStatus', deviceStatus.value)
+        // 更新设备参数
+        updateDeviceParams()
+        
+        localStorage.setItem('faultName', faultName.value)
+        ElMessage.warning(`故障类型变更: ${currentFaultName}`)
+        
+        // 重新触发AI分析
+        if (onFaultDetected) {
+          try {
+            onFaultDetected()
+          } catch (error) {
+            console.warn('自动故障分析失败:', error)
+          }
         }
       }
+    } else {
+      // 设备正常运行
+      monitoringStats.value.consecutiveRunning++
+      monitoringStats.value.consecutiveFaults = 0
       
-    } catch (error) {
-      console.error('[设备监控] 查询状态失败:', error)
-      // 网络错误不改变设备状态，只记录错误
-      if (monitoringStats.value.totalChecks % 10 === 0) {
-        // 每10次错误显示一次提示，避免过多提示
-        ElMessage.warning('设备状态查询失败，请检查网络连接')
+      if (deviceStatus.value === 'fault') {
+        // 从故障状态恢复
+        deviceStatus.value = 'running'
+        faultName.value = ''
+        
+        // 更新设备参数
+        updateDeviceParams()
+        
+        // 保存状态到localStorage
+        localStorage.setItem('deviceStatus', deviceStatus.value)
+        localStorage.setItem('faultName', faultName.value)
+        
+        ElMessage.success('设备已恢复正常运行')
+      } else if (deviceStatus.value === 'stopped') {
+        // 从停机状态变为运行状态
+        deviceStatus.value = 'running'
+        
+        // 更新设备参数
+        updateDeviceParams()
+        
+        localStorage.setItem('deviceStatus', deviceStatus.value)
       }
     }
   }
 
-  // 更新监控间隔
-  const updateMonitoringInterval = (newInterval: number) => {
-    if (currentInterval.value === newInterval) return
-    
-    currentInterval.value = newInterval
-    
-    if (isMonitoring.value) {
-      // 重新启动监控以应用新间隔
-      stopMonitoring()
-      startMonitoring()
-    }
+  // 处理WebSocket连接事件
+  const handleWebSocketConnected = (data: any) => {
+    console.log(`[设备监控] WebSocket连接成功: ${data.equipmentName}`)
+    monitoringStats.value.connectionStatus = '已连接'
+    ElMessage.success('实时监控连接成功')
+  }
+
+  // 处理WebSocket断开事件
+  const handleWebSocketDisconnected = (data: any) => {
+    console.log(`[设备监控] WebSocket连接断开: ${data.equipmentName}`)
+    monitoringStats.value.connectionStatus = '连接断开'
+    ElMessage.warning('实时监控连接断开，正在尝试重连...')
+  }
+
+  // 处理WebSocket错误事件
+  const handleWebSocketError = (error: any) => {
+    console.error('[设备监控] WebSocket错误:', error)
+    monitoringStats.value.connectionStatus = '连接错误'
+    ElMessage.error('实时监控连接错误')
   }
 
   // 开始监控
-  const startMonitoring = () => {
-    if (isMonitoring.value || !isDeviceBound.value) {
+  const startMonitoring = async () => {
+    if (isMonitoring.value || !isDeviceBound.value || !boundDeviceInfo.value) {
       return
     }
     
-    console.log(`[设备监控] 开始监控设备: ${equipmentName.value}，间隔: ${currentInterval.value}ms`)
-    
-    isMonitoring.value = true
+    console.log(`[设备监控] 开始监控设备: ${equipmentName.value}`)
     
     // 重置统计
     monitoringStats.value = {
       lastCheckTime: '',
       totalChecks: 0,
       consecutiveFaults: 0,
-      consecutiveRunning: 0
+      consecutiveRunning: 0,
+      connectionStatus: '连接中...'
     }
     
-    // 立即检查一次
-    checkDeviceStatus()
+    // 设置WebSocket事件监听器
+    wsService.on('message', handleWebSocketMessage)
+    wsService.on('connected', handleWebSocketConnected)
+    wsService.on('disconnected', handleWebSocketDisconnected)
+    wsService.on('error', handleWebSocketError)
     
-    // 设置定时检查
-    monitoringInterval.value = window.setInterval(() => {
-      checkDeviceStatus()
-    }, currentInterval.value)
-    
-    ElMessage.success('已开始实时监控设备状态')
+    try {
+      // 连接WebSocket
+      await wsService.connect(equipmentName.value)
+      isMonitoring.value = true
+      ElMessage.success('已开始实时监控设备状态')
+    } catch (error) {
+      console.error('[设备监控] WebSocket连接失败:', error)
+      ElMessage.error('实时监控连接失败')
+      monitoringStats.value.connectionStatus = '连接失败'
+    }
   }
 
   // 停止监控
@@ -312,11 +309,29 @@ export function useRealTimeMonitoring(
     
     isMonitoring.value = false
     
-    if (monitoringInterval.value) {
-      clearInterval(monitoringInterval.value)
-      monitoringInterval.value = null
+    // 移除WebSocket事件监听器
+    wsService.off('message', handleWebSocketMessage)
+    wsService.off('connected', handleWebSocketConnected)
+    wsService.off('disconnected', handleWebSocketDisconnected)
+    wsService.off('error', handleWebSocketError)
+    
+    // 断开WebSocket连接
+    wsService.disconnect()
+    
+    // 重置设备状态
+    if (deviceStatus.value === 'fault') {
+      deviceStatus.value = 'stopped'
+      faultName.value = ''
+      
+      // 更新设备参数
+      updateDeviceParams()
+      
+      // 保存状态到localStorage
+      localStorage.setItem('deviceStatus', deviceStatus.value)
+      localStorage.setItem('faultName', faultName.value)
     }
     
+    monitoringStats.value.connectionStatus = '未连接'
     ElMessage.info('已停止设备状态监控')
   }
 
@@ -327,7 +342,16 @@ export function useRealTimeMonitoring(
       return
     }
     
-    await checkDeviceStatus()
+    if (!isMonitoring.value) {
+      // 如果没有在监控，则启动监控
+      await startMonitoring()
+    } else {
+      // 如果已经在监控，则重新连接WebSocket
+      stopMonitoring()
+      await new Promise(resolve => setTimeout(resolve, 500)) // 等待500ms确保连接完全断开
+      await startMonitoring()
+    }
+    
     ElMessage.success('设备状态已刷新')
   }
 
@@ -357,13 +381,11 @@ export function useRealTimeMonitoring(
 
   return {
     isMonitoring,
-    currentInterval,
     monitoringStats,
     equipmentName,
     startMonitoring,
     stopMonitoring,
     refreshStatus,
-    checkDeviceStatus,
     setSimulatedFault,
     updateDeviceParams
   }

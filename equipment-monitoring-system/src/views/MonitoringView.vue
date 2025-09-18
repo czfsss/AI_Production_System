@@ -39,7 +39,6 @@ const {
   getStatusText,
   // 实时监控相关
   isMonitoring,
-  currentInterval,
   monitoringStats,
   equipmentName,
   startMonitoring,
@@ -53,6 +52,9 @@ const {
     await analyzeFaultFunction.value()
   }
 })
+
+// 控制参数弹窗显示
+const showParamsDialog = ref(false)
 
 // 初始化故障分析相关功能
 const { faultAnalysis, analysisLoading, isStreaming, streamingProgress, analyzeFault } =
@@ -390,8 +392,8 @@ onUnmounted(() => {
                     </div>
                     <div class="monitoring-info">
                       <div class="info-item">
-                        <span class="label">检查间隔:</span>
-                        <span class="value">{{ currentInterval / 1000 }}秒</span>
+                        <span class="label">连接状态:</span>
+                        <span class="value">{{ monitoringStats.connectionStatus || '已连接' }}</span>
                       </div>
                       <div class="info-item" v-if="monitoringStats.lastCheckTime">
                         <span class="label">上次检查:</span>
