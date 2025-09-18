@@ -44,7 +44,6 @@ const {
   startMonitoring,
   stopMonitoring,
   refreshStatus,
-  updateDeviceParams,
   simulateDeviceFault,
 } = useDeviceBinding(requireAuth, async () => {
   // 故障检测回调，调用AI分析
@@ -326,7 +325,11 @@ onUnmounted(() => {
             <!-- Current Device Status -->
             <div :class="['card', 'device-status-card', `status-${deviceStatus}`]">
               <div class="card-header">
-                <h2 class="card-title">当前设备监控状态</h2>
+                <div class="status-header-left">
+                  <button class="params-detail-btn" @click="showParamsDialog = true">
+                    设备参数详情
+                  </button>
+                </div>
                 <div class="header-actions">
                   <el-button
                     v-if="isDeviceBound && !isMonitoring"
@@ -432,87 +435,6 @@ onUnmounted(() => {
                     </el-button>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <!-- Current Device Parameters -->
-            <div class="card device-params-card">
-              <div class="card-header">
-                <h2 class="card-title">当前设备参数</h2>
-                <div class="header-actions">
-                  <el-button v-if="isDeviceBound" type="info" @click="updateDeviceParams" size="small"
-                    >刷新参数</el-button
-                  >
-                </div>
-              </div>
-              <div v-if="currentDeviceParams" class="params-grid">
-                <div class="param-item">
-                  <div class="param-label">生产速度（卷接机）</div>
-                  <div class="param-value">{{ currentDeviceParams.productionSpeed }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">烟支重量标准偏差（SD）</div>
-                  <div class="param-value">{{ currentDeviceParams.weightStandardDeviation }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">压缩空气工作压力</div>
-                  <div class="param-value">{{ currentDeviceParams.compressedAirPressure }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">压缩空气流量（卷烟机）</div>
-                  <div class="param-value">{{ currentDeviceParams.compressedAirFlowCigarette }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">压缩空气流量（接装机）</div>
-                  <div class="param-value">{{ currentDeviceParams.compressedAirFlowAssembly }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">真空系统工作压力</div>
-                  <div class="param-value">{{ currentDeviceParams.vacuumSystemPressure }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">除尘系统负压</div>
-                  <div class="param-value">{{ currentDeviceParams.dustCollectionPressure }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">空头剔除率</div>
-                  <div class="param-value">{{ currentDeviceParams.looseEndRejectRate }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">设备运行效率（OEE）</div>
-                  <div class="param-value">{{ currentDeviceParams.oee }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">风室负压（压力传感器）</div>
-                  <div class="param-value">{{ currentDeviceParams.airChamberNegativePressure }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">烙铁温度（温度传感器）</div>
-                  <div class="param-value">{{ currentDeviceParams.solderingIronTemperature }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">烟支平均重量（称重传感器）</div>
-                  <div class="param-value">{{ currentDeviceParams.averageCigaretteWeight }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">刀头振动幅度（振动传感器）</div>
-                  <div class="param-value">{{ currentDeviceParams.cutterVibrationAmplitude }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">胶泵压力（压力传感器）</div>
-                  <div class="param-value">{{ currentDeviceParams.gluePumpPressure }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">烟支长度（激光传感器）</div>
-                  <div class="param-value">{{ currentDeviceParams.cigaretteLength }}</div>
-                </div>
-                <div class="param-item">
-                  <div class="param-label">主轴转速（编码器）</div>
-                  <div class="param-value">{{ currentDeviceParams.spindleSpeed }}</div>
-                </div>
-              </div>
-              <div v-else class="no-data">
-                <!-- 暂无数据的样式由CSS控制 -->
               </div>
             </div>
           </div>
@@ -859,6 +781,91 @@ onUnmounted(() => {
         </div>
       </template>
     </el-dialog>
+
+    <!-- 设备参数弹窗 -->
+    <el-dialog
+      v-model="showParamsDialog"
+      title="设备参数详情"
+      width="90%"
+      class="params-dialog"
+    >
+      <div v-if="currentDeviceParams" class="params-dialog-content">
+        <div class="params-grid-dialog">
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">生产速度（卷接机）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.productionSpeed }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">烟支重量标准偏差（SD）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.weightStandardDeviation }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">压缩空气工作压力</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.compressedAirPressure }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">压缩空气流量（卷烟机）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.compressedAirFlowCigarette }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">压缩空气流量（接装机）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.compressedAirFlowAssembly }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">真空系统工作压力</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.vacuumSystemPressure }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">除尘系统负压</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.dustCollectionPressure }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">空头剔除率</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.looseEndRejectRate }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">设备运行效率（OEE）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.oee }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">风室负压（压力传感器）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.airChamberNegativePressure }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">烙铁温度（温度传感器）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.solderingIronTemperature }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">烟支平均重量（称重传感器）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.averageCigaretteWeight }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">刀头振动幅度（振动传感器）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.cutterVibrationAmplitude }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">胶泵压力（压力传感器）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.gluePumpPressure }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">烟支长度（激光传感器）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.cigaretteLength }}</div>
+          </div>
+          <div class="param-item-dialog">
+            <div class="param-label-dialog">主轴转速（编码器）</div>
+            <div class="param-value-dialog">{{ currentDeviceParams.spindleSpeed }}</div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="no-data-dialog">
+        <p>暂无设备参数数据</p>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showParamsDialog = false">关闭</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1145,6 +1152,7 @@ onUnmounted(() => {
 .monitoring-layout {
   display: flex;
   gap: 20px;
+  align-items: stretch; /* 确保两侧高度一致 */
 }
 
 .left-column,
@@ -1154,6 +1162,24 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 20px;
   min-width: 0; /* 防止flex容器被内容撤开 */
+}
+
+/* 确保设备状态卡片和AI分析卡片高度一致 */
+.device-status-card,
+.ai-analysis-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 允许内容滚动 */
+}
+
+/* 卡片内容区域自适应 */
+.enhanced-status-display,
+.ai-analysis-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* 设备参数卡片样式 */
@@ -3340,6 +3366,193 @@ onUnmounted(() => {
   .ai-analysis-container {
     padding: 15px;
   }
+}
+
+/* 参数弹窗样式 */
+.params-dialog .el-dialog__header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px 12px 0 0;
+}
+
+.params-dialog .el-dialog__title {
+  color: white;
+  font-weight: 600;
+  font-size: 20px;
+}
+
+.params-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: white;
+  font-size: 20px;
+}
+
+.params-dialog-content {
+  padding: 20px 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.params-grid-dialog {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  padding: 0 20px;
+}
+
+.param-item-dialog {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+  border-radius: 12px;
+  border: 1px solid #e1ecf4;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.1);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.param-item-dialog:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(64, 158, 255, 0.15);
+  border-color: #409eff;
+}
+
+.param-item-dialog::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(180deg, #409eff, #67c23a, #e6a23c, #f56c6c);
+  opacity: 0.8;
+}
+
+.param-label-dialog {
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.param-label-dialog::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #409eff;
+  opacity: 0.6;
+}
+
+.param-value-dialog {
+  font-size: 20px;
+  font-weight: 700;
+  color: #303133;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  position: relative;
+  line-height: 1.2;
+}
+
+.no-data-dialog {
+  text-align: center;
+  padding: 60px 20px;
+  color: #909399;
+}
+
+.no-data-dialog p {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* 参数详情按钮样式 */
+.status-header-left {
+  display: flex;
+  align-items: center;
+}
+
+.params-detail-btn {
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.2);
+}
+
+.params-detail-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+/* 响应式设计 - 参数弹窗 */
+@media (max-width: 768px) {
+  .params-dialog .el-dialog {
+    width: 95% !important;
+    margin: 10px auto;
+  }
+
+  .params-grid-dialog {
+    grid-template-columns: 1fr;
+    padding: 0 15px;
+    gap: 12px;
+  }
+
+  .param-item-dialog {
+    padding: 12px;
+  }
+
+  .param-value-dialog {
+    font-size: 18px;
+  }
+}
+
+/* 新的参数详情按钮样式 */
+.params-detail-btn {
+  cursor: pointer;
+  position: relative;
+  padding: 10px 24px;
+  font-size: 18px;
+  color: rgb(0, 0, 0);
+  border: 2px solid rgb(0, 0, 0);
+  border-radius: 34px;
+  background-color: transparent;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.320, 1);
+  overflow: hidden;
+  box-shadow: 2px 2px rgba(0, 0, 0, 0.2);
+}
+
+.params-detail-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 50px;
+  height: 50px;
+  border-radius: inherit;
+  scale: 0;
+  z-index: -1;
+  background-color: rgb(255, 255, 255);
+  transition: all 0.6s cubic-bezier(0.23, 1, 0.320, 1);
+}
+
+.params-detail-btn:hover::before {
+  scale: 3;
+}
+
+.params-detail-btn:hover {
+  color: #212121;
+  scale: 1.1;
+  box-shadow: 0 0px 20px rgba(193, 163, 98, 0.4);
+}
+
+.params-detail-btn:active {
+  scale: 1;
 }
 </style>
 
