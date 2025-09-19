@@ -152,6 +152,12 @@ export async function requestDifyAnalysis(
                     isComplete: true
                   })
                 }
+                
+                // 添加分析完成标记，帮助前端判断分析状态
+                onMessage({
+                  content: '\n\n**分析完成**',
+                  isComplete: true
+                })
               } else if (parsed.event === 'error') {
                 console.error('API返回错误:', parsed)
                 onError(cleanContent(parsed.message) || '分析过程中发生错误')

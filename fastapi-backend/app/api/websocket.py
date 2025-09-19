@@ -8,6 +8,7 @@ from datetime import datetime
 from config import tdengine_config, point_map, mysql_config
 from schemas.equ_bending import QueryEquBending, ResponseEquStatus
 from api.equ_monitor import query_stop_history
+from config.point_map import get_all_tablepoint
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -81,10 +82,10 @@ async def get_equ_params(equipment_name: str) -> Dict[str, Optional[str]]:
     """
     获取设备的所有参数值
     """
-    if point_map.point.get(equipment_name) is None:
+    if get_all_tablepoint(equipment_name) is None:
         raise HTTPException(status_code=400, detail="设备名称错误！")
 
-    params = point_map.point[equipment_name]
+    params = await get_all_tablepoint(equipment_name)
     param_results = {}
     # 创建所有查询任务
     tasks = []
@@ -116,9 +117,9 @@ async def query_equipment_params(equipment_name: str):
                     return param_results
                 elif param_results["status"] == 3:
                     # 获取设备ID用于查询停机历史
-                    equipment_id = point_map.point[equipment_name]["status"].split("_")[
-                        0
-                    ]
+                    equipment_id = get_all_tablepoint(equipment_name)["status"].split(
+                        "_"
+                    )[0]
                     stop_reason = await query_stop_history(equipment_id)
                     logging.info(stop_reason)
                     if stop_reason:

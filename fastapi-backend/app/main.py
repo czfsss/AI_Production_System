@@ -7,6 +7,7 @@ from api.user import user_router
 from api.fault import fault_router
 from api.equ_monitor import equ_bending_router
 from api.websocket import websocket_router
+from api.echarts import echarts_router
 
 
 app = FastAPI()
@@ -32,9 +33,12 @@ app.include_router(fault_router, prefix="/api/fault", tags=["故障相关API"])
 # 注册设备监测路由
 app.include_router(equ_bending_router, prefix="/api/equ", tags=["设备监测相关API"])
 
+# 注册Echarts路由
+app.include_router(echarts_router, prefix="/api/echarts", tags=["Echarts相关API"])
+
 # 注册WebSocket路由
 app.include_router(websocket_router, prefix="/api", tags=["WebSocket相关API"])
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8001, reload=True)

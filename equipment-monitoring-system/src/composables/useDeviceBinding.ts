@@ -150,11 +150,14 @@ export function useDeviceBinding(
         customClass: 'unbind-confirm'
       })
       .then(() => {
+        // 先清除设备信息，然后再停止监控，这样useRealTimeMonitoring中的watch函数才能正确识别是用户主动解绑
+        const deviceInfoToClear = boundDeviceInfo.value
+        boundDeviceInfo.value = null
+        
         // 停止监控
         stopMonitoring()
         
         isDeviceBound.value = false
-        boundDeviceInfo.value = null
         currentDeviceParams.value = null
         deviceStatus.value = 'stopped'
         faultName.value = ''

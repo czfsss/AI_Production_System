@@ -7,6 +7,7 @@ import {
 } from '../services/equipmentMonitor'
 import { createWebSocketService } from '../services/websocket'
 import { API_CONFIG } from '../config/api'
+import { useMonitoringStore } from '../stores/monitoring'
 
 interface BoundDeviceInfo {
   type: string
@@ -23,6 +24,9 @@ export function useRealTimeMonitoring(
   currentDeviceParams: Ref<any>,
   onFaultDetected?: () => Promise<void>
 ) {
+  // 获取全局监控状态管理
+  const monitoringStore = useMonitoringStore()
+  
   // 标记是否为模拟故障状态
   const isSimulatedFault = ref(false)
   // 监控状态
@@ -184,6 +188,9 @@ export function useRealTimeMonitoring(
         localStorage.setItem('deviceStatus', deviceStatus.value)
         localStorage.setItem('faultName', faultName.value)
         
+        // 创建全局故障警告
+        monitoringStore.createFaultAlert(currentFaultName)
+        
         ElMessage.error(`设备发生故障: ${currentFaultName}`)
         
         // 触发AI分析
@@ -202,6 +209,12 @@ export function useRealTimeMonitoring(
         updateDeviceParams()
         
         localStorage.setItem('faultName', faultName.value)
+        
+        // 更新全局故障警告
+        if (monitoringStore.currentFaultAlert) {
+          monitoringStore.updateFaultAlertName(monitoringStore.currentFaultAlert.id, currentFaultName)
+        }
+        
         ElMessage.warning(`故障类型变更: ${currentFaultName}`)
         
         // 重新触发AI分析
@@ -229,6 +242,9 @@ export function useRealTimeMonitoring(
         // 保存状态到localStorage
         localStorage.setItem('deviceStatus', deviceStatus.value)
         localStorage.setItem('faultName', faultName.value)
+        
+        // 关闭全局故障警告
+        monitoringStore.removeFaultAlerts()
         
         ElMessage.success('设备已恢复正常运行')
       } else if (deviceStatus.value === 'stopped') {
@@ -291,6 +307,15 @@ export function useRealTimeMonitoring(
       // 连接WebSocket
       await wsService.connect(equipmentName.value)
       isMonitoring.value = true
+      
+      // 更新全局监控状态
+      monitoringStore.setMonitoringStatus(true)
+      monitoringStore.setDeviceBinding(true, {
+        type: boundDeviceInfo.value.type,
+        number: boundDeviceInfo.value.number.toString(),
+        shift: boundDeviceInfo.value.shift
+      }, equipmentName.value)
+      
       ElMessage.success('已开始实时监控设备状态')
     } catch (error) {
       console.error('[设备监控] WebSocket连接失败:', error)
@@ -308,6 +333,9 @@ export function useRealTimeMonitoring(
     console.log('[设备监控] 停止监控')
     
     isMonitoring.value = false
+    
+    // 更新全局监控状态
+    monitoringStore.setMonitoringStatus(false)
     
     // 移除WebSocket事件监听器
     wsService.off('message', handleWebSocketMessage)
@@ -363,14 +391,27 @@ export function useRealTimeMonitoring(
         startMonitoring()
       }, 1000) // 延迟1秒开始监控
     } else {
-      // 设备解绑后停止监控
-      stopMonitoring()
+      // 只在用户主动解绑设备时停止监控，而不是在组件卸载时
+      // 这样可以确保在切换模块时监控继续运行
+      if (boundDeviceInfo.value) {
+        // 设备信息存在，说明是组件卸载导致的isDeviceBound变化，不停止监控
+        console.log('[设备监控] 检测到组件卸载，保持监控运行')
+      } else {
+        // 设备信息不存在，说明是用户主动解绑设备，停止监控
+        stopMonitoring()
+      }
     }
   }, { immediate: true })
 
-  // 组件卸载时清理
+  // 组件卸载时清理 - 不再停止监控，以支持后台监控
   onUnmounted(() => {
-    stopMonitoring()
+    // 移除WebSocket事件监听器，但不断开连接
+    wsService.off('message', handleWebSocketMessage)
+    wsService.off('connected', handleWebSocketConnected)
+    wsService.off('disconnected', handleWebSocketDisconnected)
+    wsService.off('error', handleWebSocketError)
+    
+    console.log('[设备监控] 组件卸载，保持监控运行以支持后台监控')
   })
 
   // 设置模拟故障状态

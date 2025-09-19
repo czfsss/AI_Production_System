@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Monitor, Tools, Reading, User, Setting } from '@element-plus/icons-vue'
+// import { Monitor, Tools, Reading, User, Setting } from '@element-plus/icons-vue'
 // 导入登录按钮组件
 import LoginButton from './components/LoginButton.vue'
+// 导入全局故障警告组件
+import GlobalFaultAlert from './components/GlobalFaultAlert.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -75,6 +77,9 @@ const navigateTo = (moduleKey: string) => {
     <main class="main-content">
       <router-view />
     </main>
+    
+    <!-- 全局故障警告组件 -->
+    <GlobalFaultAlert />
   </div>
 </template>
 

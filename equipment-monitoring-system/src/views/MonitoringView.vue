@@ -2,10 +2,10 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { VideoPlay, VideoPause, Warning, Loading, Clock } from '@element-plus/icons-vue'
-import MarkdownIt from 'markdown-it'
-import hljs from 'highlight.js'
-import 'highlight.js/styles/github.css'
 import { useAuthStore } from '../stores/auth'
+import { useMonitoringStore } from '../stores/monitoring'
+import GlobalFaultAlert from '../components/GlobalFaultAlert.vue'
+import MarkdownRenderer from '../components/MarkdownRenderer.vue'
 
 // 导入组合式函数
 import { useAuth } from '@/composables/useAuth'
@@ -78,7 +78,7 @@ const {
   forceResizeCharts,
 } = useCharts()
 
-// 初始化班次分析相关功能
+// 初始化班组分析相关功能
 const {
   isAnalyzingShift,
   shiftAnalysisResult,
@@ -132,26 +132,6 @@ watch(faultDashboardTab, (newTab) => {
   }
 })
 
-// Markdown配置
-const md: MarkdownIt = new MarkdownIt({
-  html: true, // 允许HTML标签
-  breaks: true, // 自动转换换行
-  linkify: true, // 自动识别链接
-  typographer: true, // 启用智能引号和符号替换
-  highlight: function (str: string, lang: string) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return (
-          '<pre class="hljs"><code>' +
-          hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
-          '</code></pre>'
-        )
-      } catch {}
-    }
-    return '<pre class="hljs"><code>' + MarkdownIt.prototype.utils.escapeHtml(str) + '</code></pre>'
-  },
-})
-
 // 监听标签页变化，自动加载数据
 // 监听标签页变化，自动加载数据
 watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => {
@@ -179,6 +159,7 @@ watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => 
 
 // 监听登录状态变化，显示登录成功提示
 const authStore = useAuthStore()
+const monitoringStore = useMonitoringStore()
 watch(
   () => authStore.isLoggedIn,
   (newValue, oldValue) => {
@@ -187,6 +168,36 @@ watch(
     }
   },
   { immediate: false },
+)
+
+// 监听设备状态变化，当设备状态变为故障时自动触发AI分析
+watch(
+  () => deviceStatus,
+  (newStatus, oldStatus) => {
+    // 当设备状态从非故障状态变为故障状态时，自动触发AI分析
+    if (newStatus === 'fault' && oldStatus !== 'fault' && activeTab.value === 'monitoring') {
+      // 延迟一点时间触发分析，确保故障信息已经完全更新
+      setTimeout(() => {
+        // 检查是否已有分析结果
+        const existingAnalysis = monitoringStore.currentFaultAlert?.aiAnalysis
+        if (existingAnalysis && existingAnalysis.trim() && !faultAnalysis.value) {
+          // 如果已有分析结果且当前没有显示分析结果，则直接显示
+          faultAnalysis.value = existingAnalysis
+          ElMessage.info('已加载之前的AI分析结果')
+          
+          // 如果正在流式响应，则不需要重新开始分析
+          if (isStreaming.value) {
+            return
+          }
+        }
+        
+        // 如果没有分析结果或者不在流式响应中，则开始新的分析
+        if (!faultAnalysis.value && !analysisLoading.value && !isStreaming.value) {
+          analyzeFault()
+        }
+      }, 500)
+    }
+  }
 )
 
 // 监听标签页变化，管理图表自动刷新
@@ -235,6 +246,96 @@ onMounted(() => {
     queryFaultHistory()
   }
 
+  // 检查全局监控状态，如果监控已在运行，则同步本地状态
+  if (monitoringStore.isMonitoring) {
+    // 如果全局监控正在运行，但本地设备未绑定，则尝试恢复设备绑定
+    if (!isDeviceBound && monitoringStore.isDeviceBound) {
+      // 从全局状态恢复设备绑定信息
+      deviceType.value = monitoringStore.deviceInfo?.type || ''
+      deviceNumber.value = parseInt(monitoringStore.deviceInfo?.number || '1')
+      shift.value = monitoringStore.deviceInfo?.shift || 'A'
+      
+      // 触发设备绑定
+      bindDevice()
+    }
+  }
+
+  // 检查是否有故障状态和已保存的AI分析结果
+  if (deviceStatus.value === 'fault' && monitoringStore.currentFaultAlert?.aiAnalysis) {
+    const existingAnalysis = monitoringStore.currentFaultAlert.aiAnalysis
+    if (existingAnalysis && existingAnalysis.trim()) {
+      // 恢复AI分析结果
+      faultAnalysis.value = existingAnalysis
+      
+      // 如果分析结果不完整，可能需要重新开始分析
+      if (!existingAnalysis.includes('分析完成') && !analysisLoading.value && !isStreaming.value) {
+        // 延迟一点时间重新开始分析，确保组件完全加载
+        setTimeout(() => {
+          analyzeFault()
+        }, 500)
+      }
+    }
+  }
+
+  // 添加全局事件监听器，用于处理来自GlobalFaultAlert组件的AI分析请求
+  const handleFaultAnalysis = (event: CustomEvent) => {
+    if (activeTab.value !== 'monitoring') {
+      // 如果当前不在监控页面，切换到监控页面
+      activeTab.value = 'monitoring'
+    }
+    
+    // 延迟执行AI分析，确保页面切换完成
+    setTimeout(() => {
+      // 检查是否已有分析结果
+      const existingAnalysis = monitoringStore.currentFaultAlert?.aiAnalysis
+      if (existingAnalysis && existingAnalysis.trim()) {
+        // 如果已有分析结果，直接显示
+        faultAnalysis.value = existingAnalysis
+        ElMessage.info('已加载之前的AI分析结果')
+        
+        // 检查是否正在流式响应
+        if (isStreaming.value) {
+          // 如果正在流式响应，不需要重新开始分析
+          return
+        }
+      }
+      
+      // 如果没有分析结果或者不在流式响应中，则开始新的分析
+      if (!analysisLoading.value && !isStreaming.value) {
+        analyzeFault()
+      }
+    }, 300)
+  }
+
+  // 添加事件监听器
+  window.addEventListener('trigger-fault-analysis', handleFaultAnalysis as EventListener)
+
+  // 添加流式分析结果监听器，用于在后台接收分析结果
+  const handleStreamingAnalysis = (event: CustomEvent) => {
+    const { content, isComplete, messageCount } = event.detail
+    
+    // 更新分析结果
+    faultAnalysis.value = content
+    
+    // 更新流式状态
+    if (!isComplete) {
+      isStreaming.value = true
+      streamingProgress.value = messageCount
+      analysisLoading.value = false
+    } else {
+      isStreaming.value = false
+    }
+  }
+
+  // 添加流式分析事件监听器
+  window.addEventListener('fault-analysis-streaming', handleStreamingAnalysis as EventListener)
+
+  // 在组件卸载时移除事件监听器
+  onUnmounted(() => {
+    window.removeEventListener('trigger-fault-analysis', handleFaultAnalysis as EventListener)
+    window.removeEventListener('fault-analysis-streaming', handleStreamingAnalysis as EventListener)
+  })
+
   // 注意：现在使用实时数据监控，不再需要模拟参数更新
   // 设备参数将通过实时监控自动更新
 })
@@ -242,11 +343,17 @@ onMounted(() => {
 // 组件卸载时的清理
 onUnmounted(() => {
   stopAutoRefresh()
+  // 不再停止监控，让监控在后台继续运行
+  // stopMonitoring()
 })
 </script>
 
 <template>
-  <div class="monitoring-view">
+  <div class="monitoring-container">
+    <!-- 全局故障警告组件 -->
+    <GlobalFaultAlert />
+    
+    <div class="monitoring-view">
     <!-- Tab Navigation -->
     <div class="tab-navigation-container">
       <!-- 移动端展开按钮 -->
@@ -308,13 +415,22 @@ onUnmounted(() => {
                 />
               </el-select>
             </el-form-item>
-            <el-form-item label="当前班次">
-              <el-select v-model="shift" placeholder="请选择班次" class="enhanced-select">
+            <el-form-item label="当前班组">
+              <el-select v-model="shift" placeholder="请选择班组" class="enhanced-select">
                 <el-option v-for="s in shifts" :key="s.value" :label="s.label" :value="s.value" />
               </el-select>
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="bindDevice" class="bind-button">绑定设备</el-button>
+              <el-button type="primary" @click="() => { 
+  bindDevice(); 
+  if (boundDeviceInfo) {
+    monitoringStore.setDeviceBinding(true, {
+      type: boundDeviceInfo.type,
+      number: boundDeviceInfo.number.toString(),
+      shift: boundDeviceInfo.shift
+    }, equipmentName);
+  }
+}" class="bind-button">绑定设备</el-button>
             </el-form-item>
           </el-form>
         </div>
@@ -334,17 +450,17 @@ onUnmounted(() => {
                   <el-button
                     v-if="isDeviceBound && !isMonitoring"
                     type="success"
-                    @click="startMonitoring"
+                    @click="() => { startMonitoring(); monitoringStore.setMonitoringStatus(true); }"
                     size="small"
                     >开始监控</el-button
                   >
-                  <el-button v-if="isMonitoring" type="warning" @click="stopMonitoring" size="small"
+                  <el-button v-if="isMonitoring" type="warning" @click="() => { stopMonitoring(); monitoringStore.setMonitoringStatus(false); }" size="small"
                     >停止监控</el-button
                   >
                   <el-button v-if="isMonitoring" type="info" @click="refreshStatus" size="small"
                     >刷新状态</el-button
                   >
-                  <el-button type="danger" @click="unbindDevice" size="small">解绑设备</el-button>
+                  <el-button type="danger" @click="() => { unbindDevice(); monitoringStore.setDeviceBinding(false); }" size="small">解绑设备</el-button>
                 </div>
               </div>
               <div class="enhanced-status-display">
@@ -356,7 +472,7 @@ onUnmounted(() => {
                     <div class="shift-info">
                       <el-icon><Clock /></el-icon>
                       <span
-                        >班次:
+                        >班组:
                         {{ shifts.find((s) => s.value === boundDeviceInfo?.shift)?.label }}</span
                       >
                     </div>
@@ -458,17 +574,11 @@ onUnmounted(() => {
                   <p>AI正在分析中，请稍候...</p>
                 </div>
                 <div v-else-if="faultAnalysis" class="analysis-content-wrapper">
-                  <div
-                    class="markdown-content analysis-result"
-                    v-html="md.render(faultAnalysis)"
-                  ></div>
+                  <MarkdownRenderer :content="faultAnalysis" content-class="analysis-result" fill-container />
                   <div v-if="isStreaming" class="streaming-cursor">|</div>
                 </div>
                 <div v-else class="prompt-analysis">
-                  <p>设备发生故障，点击下方按钮开始AI分析。</p>
-                  <el-button type="primary" @click="analyzeFault" :loading="analysisLoading"
-                    >开始AI分析</el-button
-                  >
+                  <p>AI正在准备分析...</p>
                 </div>
               </div>
             </div>
@@ -517,7 +627,7 @@ onUnmounted(() => {
               <div class="charts-container">
                 <div class="chart-row">
                   <div class="chart-item">
-                    <div ref="chart1Ref" class="chart"></div>
+                    <div ref="chart3Ref" class="chart"></div>
                   </div>
                   <div class="chart-item">
                     <div ref="chart2Ref" class="chart"></div>
@@ -525,7 +635,7 @@ onUnmounted(() => {
                 </div>
                 <div class="chart-row">
                   <div class="chart-item full-width">
-                    <div ref="chart3Ref" class="chart"></div>
+                    <div ref="chart1Ref" class="chart"></div>
                   </div>
                 </div>
                 <div class="chart-row">
@@ -609,7 +719,7 @@ onUnmounted(() => {
                     </template>
                   </el-table-column>
                   <el-table-column prop="ai_analysis" label="AI分析" />
-                  <el-table-column prop="class_shift" label="班次" width="80" />
+                  <el-table-column prop="class_shift" label="班组" width="80" />
                 </el-table>
 
                 <div class="pagination-container" style="margin-top: 20px; text-align: right">
@@ -656,7 +766,9 @@ onUnmounted(() => {
             <h2 class="card-title">本班分析结果</h2>
             <el-button type="danger" @click="closeShiftAnalysisResult" size="small">关闭</el-button>
           </div>
-          <div class="markdown-content" v-html="md.render(shiftAnalysisResult)"></div>
+          <div class="markdown-content">
+            <MarkdownRenderer :content="shiftAnalysisResult" />
+          </div>
         </div>
       </div>
     </div>
@@ -729,7 +841,7 @@ onUnmounted(() => {
               <span>{{ selectedFaultRecord.class_group }}</span>
             </div>
             <div class="detail-item">
-              <label>班次：</label>
+              <label>班组：</label>
               <span>{{ selectedFaultRecord.class_shift }}</span>
             </div>
             <div class="detail-item">
@@ -766,9 +878,10 @@ onUnmounted(() => {
           <div class="ai-analysis-container">
             <div
               v-if="selectedFaultRecord.ai_analysis"
-              class="markdown-content"
-              v-html="md.render(selectedFaultRecord.ai_analysis)"
-            ></div>
+              class="ai-analysis-content"
+            >
+              <MarkdownRenderer :content="selectedFaultRecord.ai_analysis" content-class="analysis-result" fill-container />
+            </div>
             <div v-else class="no-analysis">
               <p>暂无AI分析结果</p>
             </div>
@@ -866,6 +979,7 @@ onUnmounted(() => {
         </div>
       </template>
     </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -1007,6 +1121,13 @@ onUnmounted(() => {
 }
 
 /* 保留原有的基础样式 */
+.monitoring-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
 .monitoring-view {
   font-family:
     'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial,
@@ -1656,7 +1777,7 @@ onUnmounted(() => {
   box-shadow: 0 4px 15px rgba(148, 163, 184, 0.15);
   position: relative;
   transition: all 0.3s ease;
-  height: 100%;
+  height: 600px;
   display: flex;
   flex-direction: column;
 }
@@ -1706,15 +1827,14 @@ onUnmounted(() => {
 }
 
 .ai-analysis-content {
-  max-height: calc(100vh - 10px);
-  min-height: 600px;
+  max-height: calc(600px - 5px); /* 卡片高度减去标题高度 */
   overflow-y: auto;
   word-break: break-word;
   overflow-wrap: break-word;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-radius: 12px;
-  margin: 15px;
+  margin: 5px;
   position: relative;
   z-index: 1;
   padding: 20px;
@@ -1885,6 +2005,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  max-height: 100%;
 }
 
 /* 流式输入光标增强 */
@@ -2129,8 +2250,8 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
-.markdown-content.analysis-result {
-  max-height: none;
+.analysis-result {
+  max-height: 100%;
   height: 100%;
   overflow-y: auto;
   padding: 15px;
@@ -2142,21 +2263,21 @@ onUnmounted(() => {
   flex: 1;
 }
 
-.markdown-content.analysis-result::-webkit-scrollbar {
+.analysis-result::-webkit-scrollbar {
   width: 6px;
 }
 
-.markdown-content.analysis-result::-webkit-scrollbar-track {
+.analysis-result::-webkit-scrollbar-track {
   background: #f1f1f1;
   border-radius: 3px;
 }
 
-.markdown-content.analysis-result::-webkit-scrollbar-thumb {
+.analysis-result::-webkit-scrollbar-thumb {
   background: #c1c1c1;
   border-radius: 3px;
 }
 
-.markdown-content.analysis-result::-webkit-scrollbar-thumb:hover {
+.analysis-result::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
 
