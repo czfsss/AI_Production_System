@@ -18,6 +18,8 @@ class ConnectionManager:
     def disconnect(self, websocket: WebSocket, equipment_name: str):
         if equipment_name in self.active_connections:
             del self.active_connections[equipment_name]
+            if equipment_name in self.equipment_data_cache:
+                del self.equipment_data_cache[equipment_name]
         logging.info(f"WebSocket连接已断开，设备: {equipment_name}")
 
     async def send_personal_message(self, message: str, equipment_name: str):
@@ -36,7 +38,7 @@ class ConnectionManager:
         self.equipment_data_cache[equipment_name] = data
 
     def compare_equipment_data(self, equipment_name: str, new_data: dict) -> bool:
-        old_data = self.equipment_data_cache
-        if old_data == new_data:
-            return True
-        return False
+        old_data = self.equipment_data_cache.get(equipment_name, None)
+        if old_data is None:
+            return True  # 如果没有旧数据，视为有变化
+        return old_data != new_data

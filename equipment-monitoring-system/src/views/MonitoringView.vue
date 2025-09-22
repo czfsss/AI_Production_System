@@ -76,6 +76,19 @@ const {
   startAutoRefresh,
   stopAutoRefresh,
   forceResizeCharts,
+  connectWebSocket,
+  disconnectWebSocket,
+  isWebSocketConnected,
+  currentEquipmentName,
+  currentClassShift,
+  fetchHttpData,
+  startHttpPolling,
+  stopHttpPolling,
+  updateQueryParamsAndFetch,
+  isHttpLoading,
+  httpData,
+  queryParams,
+  websocketData
 } = useCharts()
 
 // 初始化班组分析相关功能
@@ -142,12 +155,24 @@ watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => 
     }
   }
 
-  // 当切换到数据看板时，延迟初始化和刷新图表
+  // 当切换到数据看板时，延迟初始化和刷新图表，并重新建立WebSocket连接
   if (newActiveTab === 'fault-dashboard' && newFaultDashboardTab === 'data-dashboard') {
     // 使用 nextTick 确保 DOM 更新完成后再初始化图表
     nextTick(() => {
       setTimeout(() => {
         initCharts()
+        
+        // 如果设备已绑定，重新建立WebSocket连接
+        if (isDeviceBound && equipmentName.value) {
+          // 获取当前班次
+          const classShift = getClassShiftByShift(shift.value)
+          // 重新建立WebSocket连接
+          connectWebSocket(equipmentName.value, classShift)
+          
+          // 启动HTTP轮询
+          startHttpPolling(equipmentName.value)
+        }
+        
         // 再次延迟调整图表大小，确保容器尺寸正确
         setTimeout(() => {
           forceResizeCharts()
@@ -200,7 +225,105 @@ watch(
   }
 )
 
-// 监听标签页变化，管理图表自动刷新
+// 将班次代码转换为班次名称
+const getClassShiftByShift = (shiftCode: string): string => {
+  // 优先使用从设备监控WebSocket获取的班次信息
+  const storedClassLabel = localStorage.getItem('currentClassLabel')
+  if (storedClassLabel) {
+    const classLabel = parseInt(storedClassLabel)
+    switch (classLabel) {
+      case 1:
+        return '早班'
+      case 2:
+        return '中班'
+      case 3:
+        return '晚班'
+      default:
+        return '早班' // 默认返回早班
+    }
+  }
+  
+  // 如果没有从WebSocket获取的班次信息，则使用原始逻辑
+  switch (shiftCode) {
+    case 'A':
+      return '早班'
+    case 'B':
+      return '中班'
+    case 'C':
+      return '晚班'
+    default:
+      return '早班' // 默认返回早班
+  }
+}
+
+// 将班组名称转换为枚举值
+const convertShiftToEnum = (shiftName: string): string => {
+  switch (shiftName) {
+    case '甲班':
+      return '01'
+    case '乙班':
+      return '02'
+    case '丙班':
+      return '03'
+    default:
+      return '01' // 默认返回甲班
+  }
+}
+
+// 计算当班总停机次数
+const calculateTotalFaults = (): number => {
+  // 优先使用WebSocket数据中的故障次数
+  if (websocketData.value.sort_result && websocketData.value.sort_result.length > 0) {
+    return websocketData.value.sort_result.reduce((total, item) => total + (item.故障次数 || 0), 0)
+  }
+  
+  // 如果WebSocket数据不可用，则使用HTTP数据
+  if (!httpData.value.fault_counts || httpData.value.fault_counts.length === 0) {
+    return 0
+  }
+  
+  // 根据当前选择的班组筛选数据，如果没有选择班组则计算所有班组
+  let filteredData = chartFilters.shift 
+    ? httpData.value.fault_counts.filter(item => item.班组 === chartFilters.shift)
+    : httpData.value.fault_counts
+  
+  // 根据日期范围筛选数据
+  if (chartFilters.dateRange && chartFilters.dateRange.length === 2) {
+    const startDate = new Date(chartFilters.dateRange[0])
+    const endDate = new Date(chartFilters.dateRange[1])
+    endDate.setHours(23, 59, 59, 999) // 包含结束日期的整天
+    
+    filteredData = filteredData.filter(item => {
+      if (!item.日期) return false
+      const itemDate = new Date(item.日期)
+      return itemDate >= startDate && itemDate <= endDate
+    })
+  }
+  
+  // 计算总停机次数
+  return filteredData.reduce((total, item) => total + (item.停机次数 || 0), 0)
+}
+
+// 监听设备绑定状态变化，管理WebSocket连接和HTTP轮询
+watch([isDeviceBound, equipmentName, shift], ([newIsDeviceBound, newEquipmentName, newShift]) => {
+  // 如果当前在故障看板标签页
+  if (activeTab.value === 'fault-dashboard') {
+    if (newIsDeviceBound && newEquipmentName) {
+      // 设备已绑定，连接WebSocket
+      const classShift = getClassShiftByShift(newShift)
+      connectWebSocket(newEquipmentName, classShift)
+      
+      // 启动HTTP轮询
+      startHttpPolling(newEquipmentName)
+    } else {
+      // 设备未绑定，断开WebSocket连接
+      disconnectWebSocket()
+      
+      // 停止HTTP轮询
+      stopHttpPolling()
+    }
+  }
+})
 watch(activeTab, (newTab) => {
   if (newTab === 'fault-dashboard') {
     // 使用 nextTick 确保标签页内容已经渲染
@@ -208,6 +331,17 @@ watch(activeTab, (newTab) => {
       setTimeout(() => {
         initCharts()
         startAutoRefresh()
+        
+        // 如果设备已绑定，连接WebSocket
+        if (isDeviceBound && equipmentName.value) {
+          // 获取当前班次
+          const classShift = getClassShiftByShift(shift.value)
+          connectWebSocket(equipmentName.value, classShift)
+          
+          // 启动HTTP轮询
+          startHttpPolling(equipmentName.value)
+        }
+        
         // 额外的延迟调整，解决图表挤压问题
         setTimeout(() => {
           forceResizeCharts()
@@ -216,6 +350,11 @@ watch(activeTab, (newTab) => {
     })
   } else {
     stopAutoRefresh()
+    // 断开WebSocket连接
+    disconnectWebSocket()
+    
+    // 停止HTTP轮询
+    stopHttpPolling()
   }
 })
 
@@ -233,6 +372,20 @@ onMounted(() => {
       setTimeout(() => {
         initCharts()
         startAutoRefresh()
+        
+        // 如果设备已绑定，启动HTTP轮询
+        if (isDeviceBound && equipmentName.value) {
+          startHttpPolling(equipmentName.value)
+        }
+        
+        // 如果设备已绑定且当前在数据看板标签页，重新建立WebSocket连接
+        if (isDeviceBound && equipmentName.value && faultDashboardTab.value === 'data-dashboard') {
+          // 获取当前班次
+          const classShift = getClassShiftByShift(shift.value)
+          // 重新建立WebSocket连接
+          connectWebSocket(equipmentName.value, classShift)
+        }
+        
         // 确保图表尺寸正确
         setTimeout(() => {
           forceResizeCharts()
@@ -330,10 +483,26 @@ onMounted(() => {
   // 添加流式分析事件监听器
   window.addEventListener('fault-analysis-streaming', handleStreamingAnalysis as EventListener)
 
+  // 添加页面刷新事件监听器，用于重新建立WebSocket连接
+  const handlePageRefresh = () => {
+    // 如果当前在数据看板标签页且设备已绑定，重新建立WebSocket连接
+    if (activeTab.value === 'fault-dashboard' && faultDashboardTab.value === 'data-dashboard' && isDeviceBound && equipmentName.value) {
+      const classShift = getClassShiftByShift(shift.value)
+      // 延迟执行，确保页面完全加载
+      setTimeout(() => {
+        connectWebSocket(equipmentName.value, classShift)
+      }, 1000)
+    }
+  }
+
+  // 监听页面刷新事件
+  window.addEventListener('load', handlePageRefresh)
+
   // 在组件卸载时移除事件监听器
   onUnmounted(() => {
     window.removeEventListener('trigger-fault-analysis', handleFaultAnalysis as EventListener)
     window.removeEventListener('fault-analysis-streaming', handleStreamingAnalysis as EventListener)
+    window.removeEventListener('load', handlePageRefresh)
   })
 
   // 注意：现在使用实时数据监控，不再需要模拟参数更新
@@ -343,6 +512,10 @@ onMounted(() => {
 // 组件卸载时的清理
 onUnmounted(() => {
   stopAutoRefresh()
+  // 断开WebSocket连接
+  disconnectWebSocket()
+  // 停止HTTP轮询
+  stopHttpPolling()
   // 不再停止监控，让监控在后台继续运行
   // stopMonitoring()
 })
@@ -625,6 +798,13 @@ onUnmounted(() => {
                 </el-button>
               </div>
               <div class="charts-container">
+                <!-- 总停机次数显示行 -->
+                <div class="total-faults-row">
+                  <div class="total-faults-simple">
+                    <span class="total-faults-label">当班总停机次数: </span>
+                    <span class="total-faults-value">{{ calculateTotalFaults() }}</span>
+                  </div>
+                </div>
                 <div class="chart-row">
                   <div class="chart-item">
                     <div ref="chart3Ref" class="chart"></div>
@@ -2831,7 +3011,7 @@ onUnmounted(() => {
 .header-actions {
   display: flex;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 0px;
   padding: 15px;
   background: #f8f9fa;
   border-radius: 4px;
@@ -2858,7 +3038,36 @@ onUnmounted(() => {
 }
 
 .charts-container {
-  padding: 20px;
+  padding: 10px;
+}
+
+/* 总停机次数显示行样式 */
+.total-faults-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+  margin-top: 5px;
+}
+
+.total-faults-simple {
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.total-faults-label {
+  font-size: 14px;
+  color: #606266;
+  margin-right: 8px;
+}
+
+.total-faults-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #f56c6c;
 }
 
 .chart-row {

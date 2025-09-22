@@ -33,6 +33,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
   const faultName = ref('')
   const equipmentName = ref('')
   const boundDeviceInfo = ref<DeviceInfo | null>(null)
+  const currentClassLabel = ref<number>(1) // 当前班次标签，1=早班，2=中班，3=晚班
   const monitoringStats = ref<MonitoringStats>({
     connectionStatus: '未连接',
     lastCheckTime: '',
@@ -68,6 +69,11 @@ export const useMonitoringStore = defineStore('monitoring', () => {
     if (equipName) {
       equipmentName.value = equipName
     }
+  }
+
+  // 设置当前班次标签
+  const setCurrentClassLabel = (classLabel: number) => {
+    currentClassLabel.value = classLabel
   }
 
   // 更新设备状态
@@ -186,6 +192,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
     faultName,
     equipmentName,
     boundDeviceInfo,
+    currentClassLabel,
     monitoringStats,
     activeFaultAlerts,
     showFaultAlert,
@@ -198,6 +205,7 @@ export const useMonitoringStore = defineStore('monitoring', () => {
     // 方法
     setMonitoringStatus,
     setDeviceBinding,
+    setCurrentClassLabel,
     updateDeviceStatus,
     updateMonitoringStats,
     createFaultAlert,

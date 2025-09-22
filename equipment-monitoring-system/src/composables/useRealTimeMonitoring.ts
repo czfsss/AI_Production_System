@@ -159,14 +159,19 @@ export function useRealTimeMonitoring(
       return
     }
 
-    // 从WebSocket消息中获取设备状态
+    // 从WebSocket消息中获取设备状态和班次信息
     const status = data.status || '未知状态'
+    const classLabel = data.classlabel || data.class_label || 1 // 默认为1（早班）
+    
+    // 将班次信息存储到localStorage和monitoringStore中
+    localStorage.setItem('currentClassLabel', classLabel.toString())
+    monitoringStore.setCurrentClassLabel(classLabel)
     
     // 更新统计信息
     monitoringStats.value.lastCheckTime = new Date().toLocaleTimeString()
     monitoringStats.value.totalChecks++
     
-    console.log(`[设备监控] ${equipmentName.value} 状态: ${status}`)
+    console.log(`[设备监控] ${equipmentName.value} 状态: ${status}, 班次: ${classLabel}`)
     
     const isFaulty = isEquipmentFaulty(status)
     const currentFaultName = extractFaultName(status)

@@ -1,19 +1,13 @@
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { getMultipleRandomFaultNames } from '../data/faultNames'
+import { createEChartsWebSocketService } from '../services/echartsWebSocket'
+import { createEChartsHttpService, type EChartsPostData, type EChartsPostParams } from '../services/echartsHttp'
 
 interface ChartFilters {
   dateRange: [Date, Date]
   shift: string
-}
-
-interface MockDataItem {
-  date: string
-  甲班?: number
-  乙班?: number
-  丙班?: number
-  [key: string]: any
 }
 
 interface ChartDataItem {
@@ -24,25 +18,6 @@ interface ChartDataItem {
 interface PieDataItem {
   value: number
   name: string
-}
-
-interface ProductionDataItem {
-  date: string
-  甲班?: number
-  乙班?: number
-  丙班?: number
-  [key: string]: any
-}
-
-interface DefectiveDataItem {
-  time: string
-  甲班总量?: number
-  甲班单耗?: number
-  乙班总量?: number
-  乙班单耗?: number
-  丙班总量?: number
-  丙班单耗?: number
-  [key: string]: any
 }
 
 export function useCharts() {
@@ -69,6 +44,39 @@ export function useCharts() {
   // 刷新状态
   const isRefreshing = ref(false)
   const refreshInterval = ref<number | null>(null)
+
+  // WebSocket服务
+  const echartsWebSocketService = createEChartsWebSocketService()
+  const isWebSocketConnected = ref(false)
+  const currentEquipmentName = ref('')
+  const currentClassShift = ref('')
+  
+  // WebSocket数据
+  const websocketData = ref<{
+    stop_half: Array<{故障名称: string, 停机时长: number}>
+    sort_result: Array<{故障名称: string, 故障次数: number}>
+  }>({
+    stop_half: [],
+    sort_result: []
+  })
+
+  // HTTP服务
+  const echartsHttpService = createEChartsHttpService()
+  const httpData = ref<EChartsPostData>({
+    fault_counts: [],
+    production: [],
+    bad_somke: []
+  })
+  const isHttpLoading = ref(false)
+  const httpPollingTimer = ref<NodeJS.Timeout | null>(null)
+  
+  // 查询参数
+  const queryParams = ref<EChartsPostParams>({
+    equ_name: '',
+    start_date: '',
+    end_date: '',
+    class_shift: ''
+  })
 
   // 初始化图表
   const initCharts = () => {
@@ -145,6 +153,38 @@ export function useCharts() {
   // 组件挂载时添加窗口大小改变监听
   onMounted(() => {
     window.addEventListener('resize', resizeCharts)
+    
+    // 设置WebSocket事件监听器
+    echartsWebSocketService.on('connected', (data: any) => {
+      console.log('[ECharts] WebSocket连接成功:', data)
+      isWebSocketConnected.value = true
+      currentEquipmentName.value = data.equipmentName
+      currentClassShift.value = data.classShift
+    })
+    
+    echartsWebSocketService.on('disconnected', (data: any) => {
+      console.log('[ECharts] WebSocket连接断开:', data)
+      isWebSocketConnected.value = false
+    })
+    
+    echartsWebSocketService.on('message', (data: any) => {
+      console.log('[ECharts] 收到WebSocket数据:', data)
+      // 更新WebSocket数据
+      websocketData.value = data
+      
+      // 更新图表2和图表3
+      if (chart2Instance) {
+        updateChart2WithRealData()
+      }
+      if (chart3Instance) {
+        updateChart3WithRealData()
+      }
+    })
+    
+    echartsWebSocketService.on('error', (error: any) => {
+      console.error('[ECharts] WebSocket错误:', error)
+      isWebSocketConnected.value = false
+    })
   })
 
   // 组件卸载时清理图表实例和事件监听
@@ -155,110 +195,107 @@ export function useCharts() {
     if (chart3Instance) chart3Instance.dispose()
     if (chart4Instance) chart4Instance.dispose()
     if (chart5Instance) chart5Instance.dispose()
+    
+    // 断开WebSocket连接
+    echartsWebSocketService.disconnect()
   })
 
-  // 更新图表1 - 各班组当前设备故障次数统计
-  const updateChart1 = () => {
-    if (!chart1Instance) return
-    
-    // 生成模拟数据
-    const generateMockData = (): MockDataItem[] => {
-      const startDate = new Date(chartFilters.dateRange[0]);
-      const endDate = new Date(chartFilters.dateRange[1]);
-      const data: MockDataItem[] = [];
-      let currentDate = new Date(startDate);
-
-      while (currentDate <= endDate) {
-        const dateStr = currentDate.toISOString().split('T')[0];
-        const item: MockDataItem = { date: dateStr };
-
-        // 如果选择了班组，只生成该班组的数据
-        if (chartFilters.shift) {
-          item[chartFilters.shift] = Math.floor(Math.random() * 6) + 1;
-        } else {
-          // 否则生成所有班组的数据
-          item['甲班'] = Math.floor(Math.random() * 6) + 1;
-          item['乙班'] = Math.floor(Math.random() * 6) + 1;
-          item['丙班'] = Math.floor(Math.random() * 6) + 1;
-        }
-
-        data.push(item);
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      return data;
-    };
-
-    const mockData = generateMockData();
-
-    // 确定要显示的班组
-    const series: any[] = [];
-    const legendData: string[] = [];
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1']; // 新的颜色方案
-    const shifts = chartFilters.shift ? [chartFilters.shift] : ['甲班', '乙班', '丙班'];
-
-    shifts.forEach((shift, index) => {
-      const data = mockData.map(item => item[shift] || 0);
-      const maxValue = Math.max(...data);
-      const minValue = Math.min(...data);
-      const maxIndex = data.indexOf(maxValue);
-      const minIndex = data.indexOf(minValue);
+  // 连接WebSocket
+  const connectWebSocket = async (equipmentName: string, classShift: string) => {
+    try {
+      // 优先使用从设备监控WebSocket获取的班次信息
+      const storedClassLabel = localStorage.getItem('currentClassLabel')
+      let finalClassShift = classShift
       
-      series.push({
-        name: shift,
-        type: 'bar',
-        smooth: true,
-        data: data,
-        itemStyle: { 
-          borderRadius: [4, 4, 0, 0], 
-          color: colors[index % colors.length] 
-        },
-      });
-      legendData.push(shift);
-    });
-
-    const option = {
-      title: { text: '各班组当前设备故障次数统计', left: 'center', textStyle: { fontSize: 16 } },
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow' }
-      },
-      legend: { data: legendData, top: 40 },
-      toolbox: {
-        feature: {
-          magicType: { type: ['line', 'bar'] },
-          restore: {},
-          saveAsImage: {}
+      if (storedClassLabel) {
+        const classLabel = parseInt(storedClassLabel)
+        switch (classLabel) {
+          case 1:
+            finalClassShift = '早班'
+            break
+          case 2:
+            finalClassShift = '中班'
+            break
+          case 3:
+            finalClassShift = '晚班'
+            break
+          default:
+            finalClassShift = '早班' // 默认值
         }
-      },
-      grid: { top: '25%', right: '3%', left: '3%', bottom: '3%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        data: mockData.map(item => item.date)
-      },
-      yAxis: {
-        type: 'value',
-        name: '故障次数'
-      },
-      series: series
+        console.log(`[ECharts] 使用从设备监控WebSocket获取的班次信息: ${finalClassShift} (classLabel: ${classLabel})`)
+      }
+      
+      // 如果已经连接到相同的设备和班次，先断开连接
+      if (isWebSocketConnected.value && currentEquipmentName.value === equipmentName && currentClassShift.value === finalClassShift) {
+        disconnectWebSocket()
+      }
+      
+      await echartsWebSocketService.connect(equipmentName, finalClassShift)
+      console.log('[ECharts] WebSocket连接请求已发送')
+    } catch (error) {
+      console.error('[ECharts] WebSocket连接失败:', error)
+      ElMessage.error('图表数据连接失败')
     }
-    chart1Instance.setOption(option)
   }
 
-  // 更新图表2 - 本班故障停机时长统计
-  const updateChart2 = () => {
+  // 断开WebSocket
+  const disconnectWebSocket = () => {
+    echartsWebSocketService.disconnect()
+    console.log('[ECharts] WebSocket已断开')
+  }
+
+  // 使用真实数据更新图表2 - 本班故障停机时长统计
+  const updateChart2WithRealData = () => {
     if (!chart2Instance) return
     
-    // 使用真实的故障名称数据
-    const randomFaultNames = getMultipleRandomFaultNames(6)
-    const mockData: ChartDataItem[] = randomFaultNames.map(faultName => ({
-      name: faultName,
-      value: Math.floor(Math.random() * 40) + 20 // 20-60分钟的随机停机时长
-    }))
-
-    const data = mockData.map(item => item.value);
-    const maxValue = Math.max(...data);
-    const minValue = Math.min(...data);
+    // 如果没有WebSocket数据，显示空图表
+    if (!websocketData.value.stop_half.length) {
+      const option = {
+        title: { text: '本班故障停机时长统计', left: 'center', textStyle: { fontSize: 16 } },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        toolbox: {
+          feature: {
+            magicType: { type: ['line', 'bar'] },
+            restore: {},
+            saveAsImage: {}
+          }
+        },
+        grid: { top: '20%', right: '3%', left: '3%', bottom: '20%', containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: [],
+          axisLabel: { 
+            rotate: 45,
+            fontSize: 10,
+            interval: 0
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: '停机时长(分钟)'
+        },
+        series: [{
+          type: 'bar',
+          smooth: true,
+          data: [],
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#FF8A80' },
+              { offset: 1, color: '#FF5252' }
+            ])
+          },
+        }]
+      }
+      chart2Instance.setOption(option)
+      return
+    }
+    
+    const data = websocketData.value.stop_half.map(item => item.停机时长);
+    const faultNames = websocketData.value.stop_half.map(item => item.故障名称);
 
     const option = {
       title: { text: '本班故障停机时长统计', left: 'center', textStyle: { fontSize: 16 } },
@@ -276,7 +313,7 @@ export function useCharts() {
       grid: { top: '20%', right: '3%', left: '3%', bottom: '20%', containLabel: true },
       xAxis: {
         type: 'category',
-        data: mockData.map(item => item.name),
+        data: faultNames,
         axisLabel: { 
           rotate: 45,
           fontSize: 10,
@@ -303,15 +340,79 @@ export function useCharts() {
     chart2Instance.setOption(option)
   }
 
-  // 更新图表3 - 故障分类统计
-  const updateChart3 = () => {
+  // 使用真实数据更新图表3 - 故障分类统计
+  const updateChart3WithRealData = () => {
     if (!chart3Instance) return
     
-    // 使用真实的故障名称数据
-    const randomFaultNames = getMultipleRandomFaultNames(6)
-    const mockData: PieDataItem[] = randomFaultNames.map(faultName => ({
-      value: Math.floor(Math.random() * 15) + 5, // 5-20次的随机故障次数
-      name: faultName
+    // 如果没有WebSocket数据，显示空图表
+    if (!websocketData.value.sort_result.length) {
+      const option = {
+        title: { text: '本班故障分类统计', left: 'center', textStyle: { fontSize: 16 } },
+        tooltip: {
+          trigger: 'item',
+          formatter: '{a} <br/>{b}: {c} ({d}%)',
+          textStyle: {
+            fontSize: 12
+          }
+        },
+        legend: {
+          orient: 'horizontal',
+          bottom: '5%',
+          left: 'center',
+          textStyle: {
+            fontSize: 10
+          },
+          formatter: function(name: string) {
+            // 截断过长的故障名称
+            return name.length > 15 ? name.substring(0, 15) + '...' : name
+          }
+        },
+        grid: { top: '20%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
+        series: [{
+          name: '故障次数',
+          type: 'pie',
+          radius: ['30%', '60%'], // 改为环形图，节省空间
+          center: ['50%', '45%'], // 居中显示，向上偏移一点给底部图例留空间
+          avoidLabelOverlap: false,
+          itemStyle: {
+            borderColor: '#fff',
+            borderWidth: 2
+          },
+          label: {
+            show: true,
+            formatter: '{c}次',
+            position: 'outside',
+            fontSize: 10
+          },
+          emphasis: {
+            label: {
+              show: true,
+              fontSize: 12,
+              fontWeight: 'bold'
+            },
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          },
+          labelLine: {
+            show: true,
+            length: 8,
+            length2: 12,
+            maxSurfaceAngle: 80
+          },
+          data: [],
+          color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#DDA0DD'] // 新的颜色方案
+        }]
+      }
+      chart3Instance.setOption(option)
+      return
+    }
+    
+    const data = websocketData.value.sort_result.map(item => ({
+      value: item.故障次数,
+      name: item.故障名称
     }))
 
     const option = {
@@ -370,52 +471,246 @@ export function useCharts() {
           length2: 12,
           maxSurfaceAngle: 80
         },
-        data: mockData,
+        data: data,
         color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#DDA0DD'] // 新的颜色方案
       }]
     }
     chart3Instance.setOption(option)
   }
 
-  // 更新图表4 - 产量统计（柱状图）
-  const updateChart4 = () => {
+  // 获取HTTP数据
+  const fetchHttpData = async (params?: EChartsPostParams) => {
+    try {
+      isHttpLoading.value = true
+      
+      // 使用传入的参数或默认参数
+      const requestParams = params || queryParams.value
+      
+      // 确保设备名称不为空
+      if (!requestParams.equ_name) {
+        console.warn('[ECharts HTTP] 设备名称为空，跳过请求')
+        return
+      }
+      
+      const data = await echartsHttpService.getEChartsData(requestParams)
+      httpData.value = data
+      
+      // 更新图表1、图表4和图表5
+      if (chart1Instance) {
+        updateChart1WithRealData()
+      }
+      if (chart4Instance) {
+        updateChart4WithRealData()
+      }
+      if (chart5Instance) {
+        updateChart5WithRealData()
+      }
+      
+      console.log('[ECharts HTTP] 数据获取成功:', data)
+    } catch (error) {
+      console.error('[ECharts HTTP] 获取数据失败:', error)
+      ElMessage.error('获取图表数据失败')
+    } finally {
+      isHttpLoading.value = false
+    }
+  }
+
+  // 开始HTTP轮询
+  const startHttpPolling = (equipmentName: string) => {
+    // 设置查询参数
+    queryParams.value.equ_name = equipmentName
+    
+    // 立即获取一次数据
+    fetchHttpData()
+    
+    // 每小时轮询一次
+    httpPollingTimer.value = setInterval(() => {
+      fetchHttpData()
+    }, 60 * 60 * 1000) // 1小时
+  }
+
+  // 停止HTTP轮询
+  const stopHttpPolling = () => {
+    if (httpPollingTimer.value) {
+      clearInterval(httpPollingTimer.value)
+      httpPollingTimer.value = null
+    }
+  }
+
+  // 更新查询参数并获取数据
+  const updateQueryParamsAndFetch = (params: EChartsPostParams) => {
+    // 更新查询参数
+    queryParams.value = { ...queryParams.value, ...params }
+    
+    // 立即使用新参数获取数据
+    fetchHttpData(params)
+  }
+
+  // 使用真实数据更新图表1 - 各班组当前设备故障次数统计
+  const updateChart1WithRealData = () => {
+    if (!chart1Instance) return
+    
+    // 如果没有HTTP数据，显示空图表
+    if (!httpData.value.fault_counts.length) {
+      const option = {
+        title: { text: '各班组当前设备故障次数统计', left: 'center', textStyle: { fontSize: 16 } },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        toolbox: {
+          feature: {
+            magicType: { type: ['line', 'bar'] },
+            restore: {},
+            saveAsImage: {}
+          }
+        },
+        legend: { data: [], top: 40 },
+        grid: { top: '25%', right: '3%', left: '3%', bottom: '3%', containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: []
+        },
+        yAxis: {
+          type: 'value',
+          name: '故障次数'
+        },
+        series: []
+      }
+      chart1Instance.setOption(option)
+      return
+    }
+    
+    // 按班组分组数据
+    const groupData = httpData.value.fault_counts.reduce((acc, item) => {
+      if (!acc[item.班组]) {
+        acc[item.班组] = []
+      }
+      acc[item.班组].push(item)
+      return acc
+    }, {} as Record<string, typeof httpData.value.fault_counts>)
+    
+    // 获取所有日期
+    const dates = [...new Set(httpData.value.fault_counts.map(item => item.日期))]
+    
+    // 获取所有班组
+    const teams = Object.keys(groupData)
+    
+    // 确定要显示的班组
+    const series: any[] = [];
+    const legendData: string[] = [];
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1']; // 新的颜色方案
+    const shifts = chartFilters.shift ? [chartFilters.shift] : teams;
+
+    shifts.forEach((shift, index) => {
+      const data = dates.map(date => {
+        const item = groupData[shift]?.find(d => d.日期 === date)
+        return item ? item.停机次数 : 0
+      });
+      
+      series.push({
+        name: shift,
+        type: 'bar',
+        smooth: true,
+        data: data,
+        itemStyle: { 
+          borderRadius: [4, 4, 0, 0], 
+          color: colors[index % colors.length] 
+        },
+      });
+      legendData.push(shift);
+    });
+
+    const option = {
+      title: { text: '各班组当前设备故障次数统计', left: 'center', textStyle: { fontSize: 16 } },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' }
+      },
+      legend: { data: legendData, top: 40 },
+      toolbox: {
+        feature: {
+          magicType: { type: ['line', 'bar'] },
+          restore: {},
+          saveAsImage: {}
+        }
+      },
+      grid: { top: '25%', right: '3%', left: '3%', bottom: '3%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        data: dates
+      },
+      yAxis: {
+        type: 'value',
+        name: '故障次数'
+      },
+      series: series
+    }
+    
+    chart1Instance.setOption(option)
+  }
+
+  // 使用真实数据更新图表4 - 产量统计
+  const updateChart4WithRealData = () => {
     if (!chart4Instance) return
     
-    // 生成模拟产量数据
-    const generateProductionData = (): ProductionDataItem[] => {
-      const startDate = new Date(chartFilters.dateRange[0]);
-      const endDate = new Date(chartFilters.dateRange[1]);
-      const data: ProductionDataItem[] = [];
-      let currentDate = new Date(startDate);
-
-      while (currentDate <= endDate) {
-        const dateStr = currentDate.toISOString().split('T')[0];
-        const item: ProductionDataItem = { date: dateStr };
-
-        // 生成各班组的产量数据
-        item['甲班'] = Math.floor(Math.random() * 50 + 100); // 100-150
-        item['乙班'] = Math.floor(Math.random() * 50 + 120); // 120-170
-        item['丙班'] = Math.floor(Math.random() * 50 + 90); // 90-140
-
-        data.push(item);
-        currentDate.setDate(currentDate.getDate() + 1);
+    // 如果没有HTTP数据，显示空图表
+    if (!httpData.value.production.length) {
+      const option = {
+        title: { text: '各班组产量统计', left: 'center', textStyle: { fontSize: 16 } },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        toolbox: {
+          feature: {
+            magicType: { type: ['line', 'bar'] },
+            restore: {},
+            saveAsImage: {}
+          }
+        },
+        legend: { data: [], top: 40 },
+        grid: { top: '25%', right: '3%', left: '3%', bottom: '3%', containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: []
+        },
+        yAxis: {
+          type: 'value',
+          name: '产量(箱)'
+        },
+        series: []
       }
-
-      return data;
-    };
-
-    const productionData = generateProductionData();
-
+      chart4Instance.setOption(option)
+      return
+    }
+    
+    // 按班组分组数据
+    const groupData = httpData.value.production.reduce((acc, item) => {
+      if (!acc[item.班组名称]) {
+        acc[item.班组名称] = []
+      }
+      acc[item.班组名称].push(item)
+      return acc
+    }, {} as Record<string, typeof httpData.value.production>)
+    
+    // 获取所有日期
+    const dates = [...new Set(httpData.value.production.map(item => item.日期))]
+    
+    // 获取所有班组
+    const teams = Object.keys(groupData)
+    
     // 确定要显示的班组
     const series: any[] = [];
     const legendData: string[] = [];
     const colors = ['#9B59B6', '#3498DB', '#2ECC71']; // 新的颜色方案
-    const shifts = chartFilters.shift ? [chartFilters.shift] : ['甲班', '乙班', '丙班'];
+    const shifts = chartFilters.shift ? [chartFilters.shift] : teams;
 
     shifts.forEach((shift, index) => {
-      const data = productionData.map(item => item[shift] || 0);
-      const maxValue = Math.max(...data);
-      const minValue = Math.min(...data);
+      const data = dates.map(date => {
+        const item = groupData[shift]?.find(d => d.日期 === date)
+        return item ? item['产量(箱)'] : 0
+      });
       
       series.push({
         name: shift,
@@ -446,63 +741,93 @@ export function useCharts() {
       grid: { top: '25%', right: '3%', left: '3%', bottom: '3%', containLabel: true },
       xAxis: {
         type: 'category',
-        data: productionData.map(item => item.date)
+        data: dates
       },
       yAxis: {
         type: 'value',
         name: '产量(箱)'
       },
       series: series
-    };
+    }
     
-    chart4Instance.setOption(option);
+    chart4Instance.setOption(option)
   }
 
-  // 更新图表5 - 坏烟消耗统计（柱折混合图）
-  const updateChart5 = () => {
+  // 使用真实数据更新图表5 - 坏烟统计
+  const updateChart5WithRealData = () => {
     if (!chart5Instance) return
     
-    // 生成模拟坏烟数据
-    const generateDefectiveData = (): DefectiveDataItem[] => {
-      const startDate = new Date(chartFilters.dateRange[0]);
-      const endDate = new Date(chartFilters.dateRange[1]);
-      const data: DefectiveDataItem[] = [];
-      let currentDate = new Date(startDate);
-
-      while (currentDate <= endDate) {
-        const dateStr = currentDate.toISOString().split('T')[0];
-        const item: DefectiveDataItem = { time: dateStr };
-
-        // 生成各班组的坏烟总量和单耗数据
-        item['甲班总量'] = Math.floor(Math.random() * 20 + 10); // 10-30
-        item['甲班单耗'] = parseFloat((Math.random() * 2 + 1).toFixed(2)); // 1.00-3.00
-        
-        item['乙班总量'] = Math.floor(Math.random() * 20 + 12); // 12-32
-        item['乙班单耗'] = parseFloat((Math.random() * 2 + 1.2).toFixed(2)); // 1.20-3.20
-        
-        item['丙班总量'] = Math.floor(Math.random() * 20 + 8); // 8-28
-        item['丙班单耗'] = parseFloat((Math.random() * 2 + 0.8).toFixed(2)); // 0.80-2.80
-
-        data.push(item);
-        currentDate.setDate(currentDate.getDate() + 1);
+    // 如果没有HTTP数据，显示空图表
+    if (!httpData.value.bad_somke.length) {
+      const option = {
+        title: { text: '各班组坏烟消耗统计', left: 'center', textStyle: { fontSize: 16 } },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'cross' }
+        },
+        legend: { 
+          data: [], 
+          top: '12%',
+          type: 'scroll',
+          bottom: 10 // 将图例放在底部，避免重叠
+        },
+        toolbox: {
+          feature: {
+            magicType: { type: ['line', 'bar'] },
+            restore: {},
+            saveAsImage: {}
+          }
+        },
+        grid: { top: '30%', right: '3%', left: '3%', bottom: '5%', containLabel: true }, // 调整底部空间
+        xAxis: {
+          type: 'category',
+          data: []
+        },
+        yAxis: [
+          {
+            type: 'value',
+            name: '坏烟总量(公斤)',
+            position: 'left'
+          },
+          {
+            type: 'value',
+            name: '坏烟单耗(公斤/箱)',
+            position: 'right'
+          }
+        ],
+        series: []
       }
-
-      return data;
-    };
-
-    const defectiveData = generateDefectiveData();
-
+      chart5Instance.setOption(option)
+      return
+    }
+    
+    // 按班组分组数据
+    const groupData = httpData.value.bad_somke.reduce((acc, item) => {
+      if (!acc[item.班组]) {
+        acc[item.班组] = []
+      }
+      acc[item.班组].push(item)
+      return acc
+    }, {} as Record<string, typeof httpData.value.bad_somke>)
+    
+    // 获取所有日期
+    const dates = [...new Set(httpData.value.bad_somke.map(item => item.日期))]
+    
+    // 获取所有班组
+    const teams = Object.keys(groupData)
+    
     // 确定要显示的班组
     const series: any[] = [];
     const legendData: string[] = [];
     const colors = ['#E74C3C', '#F39C12', '#27AE60']; // 新的颜色方案
-    const shifts = chartFilters.shift ? [chartFilters.shift] : ['甲班', '乙班', '丙班'];
+    const shifts = chartFilters.shift ? [chartFilters.shift] : teams;
 
     shifts.forEach((shift, index) => {
       // 坏烟总量 - 柱状图
-      const totalData = defectiveData.map(item => item[`${shift}总量`] || 0);
-      const maxTotal = Math.max(...totalData);
-      const minTotal = Math.min(...totalData);
+      const totalData = dates.map(date => {
+        const item = groupData[shift]?.find(d => d.日期 === date)
+        return item ? item['坏烟数量(公斤)'] : 0
+      });
       
       series.push({
         name: `${shift}总量`,
@@ -515,9 +840,10 @@ export function useCharts() {
       });
       
       // 坏烟单耗 - 折线图
-      const consumptionData = defectiveData.map(item => item[`${shift}单耗`] || 0);
-      const maxConsumption = Math.max(...consumptionData);
-      const minConsumption = Math.min(...consumptionData);
+      const consumptionData = dates.map(date => {
+        const item = groupData[shift]?.find(d => d.日期 === date)
+        return item ? item['坏烟单耗(公斤/箱)'] : 0
+      });
       
       series.push({
         name: `${shift}单耗`,
@@ -559,7 +885,7 @@ export function useCharts() {
       grid: { top: '30%', right: '3%', left: '3%', bottom: '5%', containLabel: true }, // 调整底部空间
       xAxis: {
         type: 'category',
-        data: defectiveData.map(item => item.time)
+        data: dates
       },
       yAxis: [
         {
@@ -574,14 +900,104 @@ export function useCharts() {
         }
       ],
       series: series
-    };
+    }
     
-    chart5Instance.setOption(option);
+    chart5Instance.setOption(option)
+  }
+
+  // 更新图表1 - 各班组当前设备故障次数统计
+  const updateChart1 = () => {
+    if (!chart1Instance) return
+    
+    // 使用真实数据
+    updateChart1WithRealData()
+  }
+
+  // 更新图表2 - 本班故障停机时长统计
+  const updateChart2 = () => {
+    if (!chart2Instance) return
+    
+    // 使用真实数据
+    updateChart2WithRealData()
+  }
+
+  // 更新图表3 - 故障分类统计
+  const updateChart3 = () => {
+    if (!chart3Instance) return
+    
+    // 使用真实数据
+    updateChart3WithRealData()
+  }
+
+  // 更新图表4 - 产量统计（柱状图）
+  const updateChart4 = () => {
+    if (!chart4Instance) return
+    
+    // 使用真实数据
+    updateChart4WithRealData()
+  }
+
+  // 更新图表5 - 各班组坏烟消耗统计
+const updateChart5 = () => {
+  if (!chart5Instance) return
+  
+  // 使用真实数据
+  updateChart5WithRealData()
+}
+
+  // 将班组名称转换为枚举值
+  const convertShiftToEnum = (shiftName: string): string => {
+    switch (shiftName) {
+      case '甲班':
+        return '01'
+      case '乙班':
+        return '02'
+      case '丙班':
+        return '03'
+      default:
+        return '01' // 默认返回甲班
+    }
+  }
+
+  // 格式化日期为YYYY-MM-DD格式
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   // 刷新图表
   const refreshCharts = () => {
     isRefreshing.value = true
+    
+    // 构建请求参数
+    const params: EChartsPostParams = {
+      equ_name: queryParams.value.equ_name
+    }
+    
+    // 添加日期范围参数
+    if (chartFilters.dateRange && chartFilters.dateRange.length === 2) {
+      params.start_date = formatDate(chartFilters.dateRange[0])
+      params.end_date = formatDate(chartFilters.dateRange[1])
+    }
+    
+    // 添加班组参数（转换为枚举值）
+    if (chartFilters.shift) {
+      params.class_group = convertShiftToEnum(chartFilters.shift)
+    }
+    
+    // 使用新参数请求数据
+    updateQueryParamsAndFetch(params)
+    
+    // 如果WebSocket已连接，重新建立连接
+    if (isWebSocketConnected.value && currentEquipmentName.value && currentClassShift.value) {
+      disconnectWebSocket()
+      setTimeout(() => {
+        connectWebSocket(currentEquipmentName.value, currentClassShift.value)
+      }, 500)
+    }
+    
     setTimeout(() => {
       updateChart1()
       updateChart2()
@@ -634,6 +1050,26 @@ export function useCharts() {
     startAutoRefresh,
     stopAutoRefresh,
     resizeCharts,
-    forceResizeCharts
+    forceResizeCharts,
+    connectWebSocket,
+    disconnectWebSocket,
+    isWebSocketConnected,
+    currentEquipmentName,
+    currentClassShift,
+    
+    // HTTP相关
+    fetchHttpData,
+    startHttpPolling,
+    stopHttpPolling,
+    updateQueryParamsAndFetch,
+    isHttpLoading,
+    httpData,
+    queryParams,
+    
+    // WebSocket数据
+    websocketData,
+    
+    // 工具函数
+    formatDate
   }
 }

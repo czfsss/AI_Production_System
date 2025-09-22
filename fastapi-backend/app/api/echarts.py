@@ -10,13 +10,15 @@ import json
 import time
 from decimal import Decimal
 
+
 # 自定义JSON编码器，处理Decimal类型
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
             return float(obj)
         return super(DecimalEncoder, self).default(obj)
-  
+
+
 # 修复导入路径
 from api.mysql_query import query_mysql
 from config.mysql_config import shucai, mes
@@ -212,14 +214,20 @@ async def websocket_endpoint(websocket: WebSocket, equ_name: str, class_shift: s
                 break
 
             data = await get_echarts_data(equ_name, class_shift)
-            compare_result = manager.compare_equipment_data(equ_name, data)
-            if compare_result == False:
-                manager.updata_equipment_data(equ_name, data)
-                await manager.send_personal_message(json.dumps(data, cls=DecimalEncoder), equ_name)
-            else:
-                continue
-            await asyncio.sleep(5)
+            # logging.info(data)
+            # if manager.compare_equipment_data(equ_name, data):
+            #     manager.updata_equipment_data(equ_name, data)
+            #     await manager.send_personal_message(
+            #         json.dumps(data, cls=DecimalEncoder), equ_name
+            #     )
+            #     logging.info(f"{equ_name}设备数据已推送（数据有变化）")
+            # else:
+            #     logging.info(f"{equ_name}设备数据未变化,不推送")
+            await manager.send_personal_message(
+                json.dumps(data, cls=DecimalEncoder), equ_name
+            )
             logging.info(f"{equ_name}设备数据已推送")
+            await asyncio.sleep(5)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, equ_name)
