@@ -30,7 +30,7 @@ app.include_router(user_router, prefix="/api/user", tags=["用户相关API"])
 app.include_router(fault_router, prefix="/api/fault", tags=["故障相关API"])
 
 # 注册Echarts路由
-app.include_router(echarts_router, prefix="/api/echarts", tags=["Echarts相关API"])
+app.include_router(echarts_router, prefix="/api", tags=["Echarts相关API"])
 
 # 注册WebSocket路由
 app.include_router(websocket_router, prefix="/api", tags=["WebSocket相关API"])

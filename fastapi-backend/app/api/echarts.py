@@ -8,7 +8,15 @@ from fastapi import APIRouter, HTTPException
 import logging
 import json
 import time
+from decimal import Decimal
 
+# 自定义JSON编码器，处理Decimal类型
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super(DecimalEncoder, self).default(obj)
+  
 # 修复导入路径
 from api.mysql_query import query_mysql
 from config.mysql_config import shucai, mes
@@ -35,22 +43,22 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
     table_name = table_name_dict["status"].split("_")[0]
 
     # 根据班次设置时间条件
-    if class_shift == Shift.DAY:  # 早班
+    if class_shift == Shift.DAY.value:  # 早班
         time_condition = "startTime >= CONCAT(CURDATE(), ' 07:30:00') AND startTime < CONCAT(CURDATE(), ' 16:00:00')"
-    elif class_shift == Shift.MID:  # 中班
+    elif class_shift == Shift.MID.value:  # 中班
         time_condition = "startTime >= CONCAT(CURDATE(), ' 16:00:00') AND startTime < CONCAT(CURDATE() + INTERVAL 1 DAY, ' 00:30:00')"
-    else:  # 晚班 (Shift.NIGHT)
+    elif class_shift == Shift.NIGHT.value:  # 晚班 (Shift.NIGHT)
         time_condition = "startTime >= CONCAT(CURDATE(), ' 00:30:00') AND startTime < CONCAT(CURDATE(), ' 07:30:00')"
 
     try:
         stop_half_sql = f"""
         SELECT
-            text AS 'fault_name',
-            SUM(duration) AS 'duration'
+            text AS '故障名称',
+            SUM(duration) AS '停机时长'
         FROM
             dc_stophistory
         WHERE
-            mchCode = {table_name}
+            mchCode = '{table_name}'
             AND {time_condition}
         GROUP BY
             text
@@ -58,12 +66,12 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
 
         stop_sort_sql = f"""
         SELECT
-            text AS 'fault_name',
-            COUNT(text) AS 'count'
+            text AS '故障名称',
+            COUNT(text) AS '故障次数'
         FROM
             dc_stophistory
         WHERE
-            mchCode = {table_name}
+            mchCode = '{table_name}'
             AND {time_condition}
         GROUP BY
             text
@@ -76,6 +84,9 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
 
         echarts_data["stop_half"] = stop_half_result
         echarts_data["sort_result"] = sort_result
+        # logging.info(f"stop_half_sql: {stop_half_sql}")
+        # logging.info(f"stop_sort_sql: {stop_sort_sql}")
+        # logging.info(echarts_data)
         logging.info(f"{table_name}班次数据获取成功")
         return echarts_data
     except Exception as e:
@@ -186,8 +197,8 @@ async def get_echarts_data_all(query_params: QueryEchartsData):
     return echarts_data_all
 
 
-@echarts_router.websocket("/echarts/{equ_name}")
-async def websocket_endpoint(websocket: WebSocket, equ_name: str, class_shift: Shift):
+@echarts_router.websocket("/ws/echarts")
+async def websocket_endpoint(websocket: WebSocket, equ_name: str, class_shift: str):
     await manager.connect(websocket, equ_name)
     logging.info(f"{equ_name}设备已连接")
 
@@ -200,15 +211,14 @@ async def websocket_endpoint(websocket: WebSocket, equ_name: str, class_shift: S
                 logging.info(f"{equ_name}设备已断开连接")
                 break
 
-        while True:
             data = await get_echarts_data(equ_name, class_shift)
             compare_result = manager.compare_equipment_data(equ_name, data)
             if compare_result == False:
                 manager.updata_equipment_data(equ_name, data)
-                await manager.send_personal_message(json.dumps(data), equ_name)
+                await manager.send_personal_message(json.dumps(data, cls=DecimalEncoder), equ_name)
             else:
                 continue
-            await asyncio.sleep(60)
+            await asyncio.sleep(5)
             logging.info(f"{equ_name}设备数据已推送")
 
     except WebSocketDisconnect:
