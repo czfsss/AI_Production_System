@@ -1,5 +1,6 @@
 // ECharts数据HTTP服务
 import axios from 'axios'
+import { API_CONFIG, getApiUrl } from '../config/api'
 
 export interface EChartsPostData {
   fault_counts: Array<{
@@ -22,14 +23,12 @@ export interface EChartsPostData {
 
 export interface EChartsPostParams {
   equ_name: string
-  start_date?: string
-  end_date?: string
+  start_time?: string
+  end_time?: string
   class_group?: string
 }
 
 export class EChartsHttpService {
-  private baseUrl: string = 'http://127.0.0.1:8000'
-
   // 获取ECharts数据
   async getEChartsData(params: EChartsPostParams): Promise<EChartsPostData> {
     try {
@@ -39,19 +38,19 @@ export class EChartsHttpService {
         equipmentName = equipmentName.replace('卷烟机', '卷接机')
       }
 
-      const url = `${this.baseUrl}/api/echarts`
+      const url = getApiUrl(API_CONFIG.endpoints.echarts)
       
       // 构建请求体，只包含非空参数
-      const requestBody: any = {
+      const requestBody: Record<string, string> = {
         equ_name: equipmentName
       }
       
       // 只添加非空的可选参数
-      if (params.start_date) {
-        requestBody.start_date = params.start_date
+      if (params.start_time) {
+        requestBody.start_time = params.start_time
       }
-      if (params.end_date) {
-        requestBody.end_date = params.end_date
+      if (params.end_time) {
+        requestBody.end_time = params.end_time
       }
       if (params.class_group) {
         requestBody.class_group = params.class_group
@@ -67,6 +66,6 @@ export class EChartsHttpService {
 }
 
 // 创建单例实例
-export const createEChartsHttpService = (baseUrl: string = 'http://127.0.0.1:8000') => {
+export const createEChartsHttpService = () => {
   return new EChartsHttpService()
 }

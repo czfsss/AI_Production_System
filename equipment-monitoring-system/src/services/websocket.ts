@@ -1,19 +1,16 @@
 // WebSocket服务
+import { API_CONFIG, getWebSocketUrl } from '../config/api'
+
 export class WebSocketService {
   private ws: WebSocket | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectInterval = 3000
   private listeners: Map<string, Function[]> = new Map()
-  private url: string
   private equipmentName: string = ''
   private isConnected = false
   private reconnectTimer: NodeJS.Timeout | null = null
   private allowReconnect = true // 控制是否允许重连
-
-  constructor(url: string) {
-    this.url = url
-  }
 
   // 连接WebSocket
   connect(equipmentName: string): Promise<void> {
@@ -30,7 +27,7 @@ export class WebSocketService {
 
       this.equipmentName = equipmentName
       this.allowReconnect = true // 允许重连
-      const wsUrl = `${this.url}/api/ws/equipment/${encodeURIComponent(equipmentName)}`
+      const wsUrl = `${getWebSocketUrl(API_CONFIG.endpoints.wsEquipment)}/${encodeURIComponent(equipmentName)}`
       
       try {
         this.ws = new WebSocket(wsUrl)
@@ -154,6 +151,6 @@ export class WebSocketService {
 }
 
 // 创建单例实例
-export const createWebSocketService = (baseUrl: string = 'ws://127.0.0.1:8000') => {
-  return new WebSocketService(baseUrl)
+export const createWebSocketService = () => {
+  return new WebSocketService()
 }

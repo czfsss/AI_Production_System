@@ -256,6 +256,64 @@ const getClassShiftByShift = (shiftCode: string): string => {
   }
 }
 
+// 将班次标签转换为班次名称（1=白班，2=中班，3=晚班）
+const getShiftNameByClassLabel = (): string => {
+  // 优先从 monitoringStore 获取
+  const currentClassLabel = monitoringStore.currentClassLabel
+  if (currentClassLabel) {
+    switch (currentClassLabel) {
+      case 1:
+        return '白班'
+      case 2:
+        return '中班'
+      case 3:
+        return '晚班'
+      default:
+        return '白班' // 默认返回白班
+    }
+  }
+  
+  // 如果 store 中没有，从 localStorage 获取
+  const storedClassLabel = localStorage.getItem('currentClassLabel')
+  if (storedClassLabel) {
+    const classLabel = parseInt(storedClassLabel)
+    switch (classLabel) {
+      case 1:
+        return '白班'
+      case 2:
+        return '中班'
+      case 3:
+        return '晚班'
+      default:
+        return '白班' // 默认返回白班
+    }
+  }
+  
+  return '白班' // 默认返回白班
+}
+
+// 将故障记录中的班次值转换为班次名称
+const getShiftNameFromClassShift = (classShift: string | number): string => {
+  // 处理数字或字符串形式的班次值
+  const shiftValue = typeof classShift === 'string' ? parseInt(classShift) : classShift
+  
+  if (isNaN(shiftValue)) {
+    // 如果不是数字，可能是字符串格式的班次名称，直接返回
+    return classShift?.toString() || '未知'
+  }
+  
+  switch (shiftValue) {
+    case 1:
+      return '白班'
+    case 2:
+      return '中班'
+    case 3:
+      return '晚班'
+    default:
+      return classShift?.toString() || '未知'
+  }
+}
+
 // 将班组名称转换为枚举值
 const convertShiftToEnum = (shiftName: string): string => {
   switch (shiftName) {
@@ -646,7 +704,9 @@ onUnmounted(() => {
                       <el-icon><Clock /></el-icon>
                       <span
                         >班组:
-                        {{ shifts.find((s) => s.value === boundDeviceInfo?.shift)?.label }}</span
+                        {{ shifts.find((s) => s.value === boundDeviceInfo?.shift)?.label }}
+                        &nbsp;|&nbsp;
+                        班次: {{ getShiftNameByClassLabel() }}</span
                       >
                     </div>
                     <div class="equipment-name" v-if="equipmentName">
@@ -899,7 +959,11 @@ onUnmounted(() => {
                     </template>
                   </el-table-column>
                   <el-table-column prop="ai_analysis" label="AI分析" />
-                  <el-table-column prop="class_shift" label="班组" width="80" />
+                  <el-table-column prop="class_shift" label="班次" width="80">
+                    <template #default="{ row }">
+                      {{ getShiftNameFromClassShift(row.class_shift) }}
+                    </template>
+                  </el-table-column>
                 </el-table>
 
                 <div class="pagination-container" style="margin-top: 20px; text-align: right">
@@ -1021,8 +1085,8 @@ onUnmounted(() => {
               <span>{{ selectedFaultRecord.class_group }}</span>
             </div>
             <div class="detail-item">
-              <label>班组：</label>
-              <span>{{ selectedFaultRecord.class_shift }}</span>
+              <label>班次：</label>
+              <span>{{ getShiftNameFromClassShift(selectedFaultRecord.class_shift) }}</span>
             </div>
             <div class="detail-item">
               <label>故障名称：</label>

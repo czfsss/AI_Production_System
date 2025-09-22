@@ -96,6 +96,8 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
 
 
 async def get_echarts_data_all(query_params: QueryEchartsData):
+    logging.info(query_params.start_time)
+    logging.info(query_params.end_time)
     start_total_time = time.time()
     class_group = ""
     planstart_group = ""
@@ -193,6 +195,7 @@ async def get_echarts_data_all(query_params: QueryEchartsData):
     end_total_time = time.time()
     total_duration = round(end_total_time - start_total_time, 2)
 
+    logging.info(fault_counts_sql)
     logging.info(f"数据库查询耗时：{query_duration}s")
     logging.info(f"总处理耗时：{total_duration}s")
     logging.info(f"{query_params.equ_name}设备数据获取成功")

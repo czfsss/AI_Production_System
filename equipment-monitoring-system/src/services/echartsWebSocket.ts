@@ -1,11 +1,12 @@
 // ECharts数据WebSocket服务
+import { API_CONFIG, getWebSocketUrl } from '../config/api'
+
 export class EChartsWebSocketService {
   private ws: WebSocket | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectInterval = 3000
   private listeners: Map<string, Function[]> = new Map()
-  private baseUrl: string = 'ws://127.0.0.1:8000'
   private isConnected = false
   private reconnectTimer: NodeJS.Timeout | null = null
   private equipmentName: string = ''
@@ -30,7 +31,7 @@ export class EChartsWebSocketService {
       this.allowReconnect = true // 允许重连
       
       // 构建WebSocket URL，添加查询参数
-      const wsUrl = `${this.baseUrl}/api/ws/echarts?equ_name=${encodeURIComponent(equipmentName)}&class_shift=${encodeURIComponent(classShift)}`
+      const wsUrl = `${getWebSocketUrl(API_CONFIG.endpoints.wsEcharts)}?equ_name=${encodeURIComponent(equipmentName)}&class_shift=${encodeURIComponent(classShift)}`
       
       try {
         this.ws = new WebSocket(wsUrl)
@@ -160,6 +161,6 @@ export class EChartsWebSocketService {
 }
 
 // 创建单例实例
-export const createEChartsWebSocketService = (baseUrl: string = 'ws://127.0.0.1:8000') => {
+export const createEChartsWebSocketService = () => {
   return new EChartsWebSocketService()
 }

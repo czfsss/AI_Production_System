@@ -73,9 +73,9 @@ export function useCharts() {
   // 查询参数
   const queryParams = ref<EChartsPostParams>({
     equ_name: '',
-    start_date: '',
-    end_date: '',
-    class_shift: ''
+    start_time: '',
+    end_time: '',
+    class_group: ''
   })
 
   // 初始化图表
@@ -538,17 +538,23 @@ export function useCharts() {
   }
 
   // 更新查询参数并获取数据
-  const updateQueryParamsAndFetch = (params: EChartsPostParams) => {
+  const updateQueryParamsAndFetch = async (params: EChartsPostParams) => {
     // 更新查询参数
     queryParams.value = { ...queryParams.value, ...params }
     
     // 立即使用新参数获取数据
-    fetchHttpData(params)
+    await fetchHttpData(params)
   }
 
   // 使用真实数据更新图表1 - 各班组当前设备故障次数统计
   const updateChart1WithRealData = () => {
     if (!chart1Instance) return
+    
+    console.log('[ECharts] 更新图表1，筛选条件:', chartFilters.shift)
+    console.log('[ECharts] 图表1数据:', httpData.value.fault_counts)
+    
+    // 完全清空图表（使用第二个参数 true 进行完全替换）
+    chart1Instance.clear()
     
     // 如果没有HTTP数据，显示空图表
     if (!httpData.value.fault_counts.length) {
@@ -577,7 +583,7 @@ export function useCharts() {
         },
         series: []
       }
-      chart1Instance.setOption(option)
+      chart1Instance.setOption(option, true) // 使用 true 进行完全替换
       return
     }
     
@@ -596,11 +602,20 @@ export function useCharts() {
     // 获取所有班组
     const teams = Object.keys(groupData)
     
-    // 确定要显示的班组
+    console.log('[ECharts] 图表1可用班组:', teams)
+    console.log('[ECharts] 图表1筛选班组:', chartFilters.shift)
+    
+    // 确定要显示的班组：如果有筛选条件且在可用班组中，只显示筛选的班组
+    let shifts: string[] = teams;
+    if (chartFilters.shift && teams.includes(chartFilters.shift)) {
+      shifts = [chartFilters.shift];
+    }
+    
+    console.log('[ECharts] 图表1实际显示班组:', shifts)
+    
     const series: any[] = [];
     const legendData: string[] = [];
     const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1']; // 新的颜色方案
-    const shifts = chartFilters.shift ? [chartFilters.shift] : teams;
 
     shifts.forEach((shift, index) => {
       const data = dates.map(date => {
@@ -647,12 +662,19 @@ export function useCharts() {
       series: series
     }
     
-    chart1Instance.setOption(option)
+    chart1Instance.setOption(option, true) // 使用 true 进行完全替换
+    console.log('[ECharts] 图表1更新完成，系列数:', series.length, '图例数:', legendData.length)
   }
 
   // 使用真实数据更新图表4 - 产量统计
   const updateChart4WithRealData = () => {
     if (!chart4Instance) return
+    
+    console.log('[ECharts] 更新图表4，筛选条件:', chartFilters.shift)
+    console.log('[ECharts] 图表4数据:', httpData.value.production)
+    
+    // 完全清空图表
+    chart4Instance.clear()
     
     // 如果没有HTTP数据，显示空图表
     if (!httpData.value.production.length) {
@@ -681,7 +703,7 @@ export function useCharts() {
         },
         series: []
       }
-      chart4Instance.setOption(option)
+      chart4Instance.setOption(option, true)
       return
     }
     
@@ -700,11 +722,20 @@ export function useCharts() {
     // 获取所有班组
     const teams = Object.keys(groupData)
     
-    // 确定要显示的班组
+    console.log('[ECharts] 图表4可用班组:', teams)
+    console.log('[ECharts] 图表4筛选班组:', chartFilters.shift)
+    
+    // 确定要显示的班组：如果有筛选条件且在可用班组中，只显示筛选的班组
+    let shifts: string[] = teams;
+    if (chartFilters.shift && teams.includes(chartFilters.shift)) {
+      shifts = [chartFilters.shift];
+    }
+    
+    console.log('[ECharts] 图表4实际显示班组:', shifts)
+    
     const series: any[] = [];
     const legendData: string[] = [];
     const colors = ['#9B59B6', '#3498DB', '#2ECC71']; // 新的颜色方案
-    const shifts = chartFilters.shift ? [chartFilters.shift] : teams;
 
     shifts.forEach((shift, index) => {
       const data = dates.map(date => {
@@ -750,12 +781,19 @@ export function useCharts() {
       series: series
     }
     
-    chart4Instance.setOption(option)
+    chart4Instance.setOption(option, true)
+    console.log('[ECharts] 图表4更新完成，系列数:', series.length, '图例数:', legendData.length)
   }
 
   // 使用真实数据更新图表5 - 坏烟统计
   const updateChart5WithRealData = () => {
     if (!chart5Instance) return
+    
+    console.log('[ECharts] 更新图表5，筛选条件:', chartFilters.shift)
+    console.log('[ECharts] 图表5数据:', httpData.value.bad_somke)
+    
+    // 完全清空图表
+    chart5Instance.clear()
     
     // 如果没有HTTP数据，显示空图表
     if (!httpData.value.bad_somke.length) {
@@ -797,7 +835,7 @@ export function useCharts() {
         ],
         series: []
       }
-      chart5Instance.setOption(option)
+      chart5Instance.setOption(option, true)
       return
     }
     
@@ -816,11 +854,20 @@ export function useCharts() {
     // 获取所有班组
     const teams = Object.keys(groupData)
     
-    // 确定要显示的班组
+    console.log('[ECharts] 图表5可用班组:', teams)
+    console.log('[ECharts] 图表5筛选班组:', chartFilters.shift)
+    
+    // 确定要显示的班组：如果有筛选条件且在可用班组中，只显示筛选的班组
+    let shifts: string[] = teams;
+    if (chartFilters.shift && teams.includes(chartFilters.shift)) {
+      shifts = [chartFilters.shift];
+    }
+    
+    console.log('[ECharts] 图表5实际显示班组:', shifts)
+    
     const series: any[] = [];
     const legendData: string[] = [];
     const colors = ['#E74C3C', '#F39C12', '#27AE60']; // 新的颜色方案
-    const shifts = chartFilters.shift ? [chartFilters.shift] : teams;
 
     shifts.forEach((shift, index) => {
       // 坏烟总量 - 柱状图
@@ -902,7 +949,8 @@ export function useCharts() {
       series: series
     }
     
-    chart5Instance.setOption(option)
+    chart5Instance.setOption(option, true)
+    console.log('[ECharts] 图表5更新完成，系列数:', series.length, '图例数:', legendData.length)
   }
 
   // 更新图表1 - 各班组当前设备故障次数统计
@@ -968,45 +1016,46 @@ const updateChart5 = () => {
   }
 
   // 刷新图表
-  const refreshCharts = () => {
+  const refreshCharts = async () => {
     isRefreshing.value = true
     
-    // 构建请求参数
-    const params: EChartsPostParams = {
-      equ_name: queryParams.value.equ_name
-    }
-    
+    try {
+      // 构建请求参数
+      const params: EChartsPostParams = {
+        equ_name: queryParams.value.equ_name
+      }
+      
     // 添加日期范围参数
     if (chartFilters.dateRange && chartFilters.dateRange.length === 2) {
-      params.start_date = formatDate(chartFilters.dateRange[0])
-      params.end_date = formatDate(chartFilters.dateRange[1])
+      params.start_time = formatDate(chartFilters.dateRange[0])
+      params.end_time = formatDate(chartFilters.dateRange[1])
     }
-    
-    // 添加班组参数（转换为枚举值）
-    if (chartFilters.shift) {
-      params.class_group = convertShiftToEnum(chartFilters.shift)
-    }
-    
-    // 使用新参数请求数据
-    updateQueryParamsAndFetch(params)
-    
-    // 如果WebSocket已连接，重新建立连接
-    if (isWebSocketConnected.value && currentEquipmentName.value && currentClassShift.value) {
-      disconnectWebSocket()
-      setTimeout(() => {
-        connectWebSocket(currentEquipmentName.value, currentClassShift.value)
-      }, 500)
-    }
-    
-    setTimeout(() => {
-      updateChart1()
-      updateChart2()
-      updateChart3()
-      updateChart4()
-      updateChart5()
-      isRefreshing.value = false
+      
+      // 添加班组参数（转换为枚举值）
+      if (chartFilters.shift) {
+        params.class_group = convertShiftToEnum(chartFilters.shift)
+      }
+      
+      console.log('[ECharts] 刷新图表，使用参数:', params)
+      
+      // 等待数据更新完成（不再重复调用图表更新，因为fetchHttpData会自动更新）
+      await updateQueryParamsAndFetch(params)
+      
+      // 如果WebSocket已连接，重新建立连接
+      if (isWebSocketConnected.value && currentEquipmentName.value && currentClassShift.value) {
+        disconnectWebSocket()
+        setTimeout(() => {
+          connectWebSocket(currentEquipmentName.value, currentClassShift.value)
+        }, 500)
+      }
+      
       ElMessage.success('图表数据已刷新')
-    }, 1000)
+    } catch (error) {
+      console.error('[ECharts] 图表刷新失败:', error)
+      ElMessage.error('图表数据刷新失败')
+    } finally {
+      isRefreshing.value = false
+    }
   }
 
   // 开始自动刷新

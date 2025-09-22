@@ -6,7 +6,6 @@ import {
   extractFaultName 
 } from '../services/equipmentMonitor'
 import { createWebSocketService } from '../services/websocket'
-import { API_CONFIG } from '../config/api'
 import { useMonitoringStore } from '../stores/monitoring'
 
 interface BoundDeviceInfo {
@@ -31,7 +30,7 @@ export function useRealTimeMonitoring(
   const isSimulatedFault = ref(false)
   // 监控状态
   const isMonitoring = ref(false)
-  const wsService = createWebSocketService(API_CONFIG.baseURL.replace('http', 'ws'))
+  const wsService = createWebSocketService()
   
   // 监控统计
   const monitoringStats = ref({
