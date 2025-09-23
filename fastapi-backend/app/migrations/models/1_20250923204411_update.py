@@ -21,5 +21,5 @@ async def upgrade(db: BaseDBAsyncClient) -> str:
 
 async def downgrade(db: BaseDBAsyncClient) -> str:
     return """
-        DROP TABLE IF EXISTS `mach_point_map`;
-        DROP TABLE IF EXISTS `fault_point_map`;"""
+        DROP TABLE IF EXISTS `fault_point_map`;
+        DROP TABLE IF EXISTS `mach_point_map`;"""

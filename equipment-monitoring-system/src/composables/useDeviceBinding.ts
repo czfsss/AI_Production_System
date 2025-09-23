@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRealTimeMonitoring } from './useRealTimeMonitoring'
+import { getCurrentShiftByTime, getCurrentShiftInfo } from '@/utils/shiftTimeUtils'
 
 interface DeviceOption {
   label: string
@@ -81,7 +82,8 @@ export function useDeviceBinding(
     stopMonitoring,
     refreshStatus,
     setSimulatedFault,
-    updateDeviceParams
+    updateDeviceParams,
+    isRefreshing
   } = useRealTimeMonitoring(
     isDeviceBound,
     boundDeviceInfo,
@@ -99,7 +101,13 @@ export function useDeviceBinding(
         return
       }
       
+      // 获取当前班次信息（用于显示）
+      const currentShift = getCurrentShiftByTime()
+      const currentShiftInfo = getCurrentShiftInfo()
+      
       const typeLabel = deviceTypes.find(t => t.value === deviceType.value)?.label || ''
+      const shiftLabel = shifts.find(s => s.value === shift.value)?.label || ''
+      
       boundDeviceInfo.value = {
         type: typeLabel,
         number: deviceNumber.value,
@@ -136,7 +144,8 @@ export function useDeviceBinding(
       localStorage.setItem('deviceStatus', deviceStatus.value)
       localStorage.setItem('faultName', faultName.value)
       
-      ElMessage.success('设备绑定成功，即将开始实时监控')
+      // 显示绑定成功信息，包含班次和班组信息
+      ElMessage.success(`设备绑定成功！当前班次：${currentShift.name} (${currentShiftInfo.timeRange})，所属班组：${shiftLabel}`)
     })
   }
 
@@ -253,6 +262,7 @@ export function useDeviceBinding(
     stopMonitoring,
     refreshStatus,
     updateDeviceParams,
-    simulateDeviceFault
+    simulateDeviceFault,
+    isRefreshing
   }
 }

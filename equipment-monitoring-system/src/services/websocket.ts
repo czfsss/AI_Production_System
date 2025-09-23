@@ -6,28 +6,30 @@ export class WebSocketService {
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectInterval = 3000
-  private listeners: Map<string, Function[]> = new Map()
+  private listeners: Map<string, ((data: any) => void)[]> = new Map()
   private equipmentName: string = ''
   private isConnected = false
-  private reconnectTimer: NodeJS.Timeout | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private allowReconnect = true // 控制是否允许重连
 
   // 连接WebSocket
   connect(equipmentName: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (this.isConnected && this.equipmentName === equipmentName) {
+      // 如果正在连接相同设备且已连接，直接返回成功
+      if (this.isConnected && this.equipmentName === equipmentName && this.ws?.readyState === WebSocket.OPEN) {
+        console.log(`[WebSocket] 设备 ${equipmentName} 已连接，跳过重复连接`)
         resolve()
         return
       }
 
-      // 如果已有连接，先关闭
-      if (this.ws) {
-        this.ws.close()
-      }
+      // 强制清理之前的连接
+      this.forceDisconnect()
 
       this.equipmentName = equipmentName
       this.allowReconnect = true // 允许重连
       const wsUrl = `${getWebSocketUrl(API_CONFIG.endpoints.wsEquipment)}/${encodeURIComponent(equipmentName)}`
+      
+      console.log(`[WebSocket] 尝试连接: ${wsUrl}`)
       
       try {
         this.ws = new WebSocket(wsUrl)
@@ -112,8 +114,35 @@ export class WebSocketService {
     this.reconnectAttempts = 0
   }
 
+  // 强制断开连接（不改变重连状态）
+  private forceDisconnect(): void {
+    console.log('[WebSocket] 强制断开之前的连接...')
+    
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
+    if (this.ws) {
+      // 临时移除事件监听器，避免触发不必要的事件
+      this.ws.onopen = null
+      this.ws.onclose = null
+      this.ws.onmessage = null
+      this.ws.onerror = null
+      
+      // 强制关闭连接
+      if (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN) {
+        this.ws.close()
+      }
+      this.ws = null
+    }
+    
+    this.isConnected = false
+    this.reconnectAttempts = 0
+  }
+
   // 添加事件监听器
-  on(event: string, callback: Function): void {
+  on(event: string, callback: (data: any) => void): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, [])
     }
@@ -121,7 +150,7 @@ export class WebSocketService {
   }
 
   // 移除事件监听器
-  off(event: string, callback: Function): void {
+  off(event: string, callback: (data: any) => void): void {
     const callbacks = this.listeners.get(event)
     if (callbacks) {
       const index = callbacks.indexOf(callback)
@@ -147,6 +176,15 @@ export class WebSocketService {
   // 获取当前设备名称
   get currentEquipmentName(): string {
     return this.equipmentName
+  }
+
+  // 获取和设置重连状态
+  get reconnectAllowed(): boolean {
+    return this.allowReconnect
+  }
+
+  set reconnectAllowed(value: boolean) {
+    this.allowReconnect = value
   }
 }
 

@@ -1,28 +1,16 @@
 import asyncio
-from math import log
 from fastapi import APIRouter, HTTPException
 from typing import List
 from datetime import datetime, time
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException
-from fastapi import APIRouter, HTTPException
 import logging
 import json
 import time
 from decimal import Decimal
-
-
-# 自定义JSON编码器，处理Decimal类型
-class DecimalEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj)
-        return super(DecimalEncoder, self).default(obj)
-
-
 # 修复导入路径
 from api.mysql_query import query_mysql
+from api.equ_monitor_ws import execute_single_query
 from config.mysql_config import shucai, mes
-
 # 导入模型和查询模型
 from schemas.fault_info import *
 from schemas.echarts import *
@@ -32,6 +20,15 @@ from schemas.websocket_connect import ConnectionManager
 from models.models import *
 from config.point_map import point_map, table_map
 from config.point_map import get_all_tablepoint
+
+
+# 自定义JSON编码器，处理Decimal类型
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super(DecimalEncoder, self).default(obj)
+
 
 echarts_router = APIRouter()
 
@@ -43,7 +40,10 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
     echarts_data = {}
     table_name_dict = await get_all_tablepoint(equ_name)
     table_name = table_name_dict["status"].split("_")[0]
-
+    if "卷烟机" in equ_name:
+        params, value = await execute_single_query("fault_counts", table_name+"_50011")
+        echarts_data[params] = value
+        logging.info(f"fault_counts:{value}")
     # 根据班次设置时间条件
     if class_shift == Shift.DAY.value:  # 早班
         time_condition = "startTime >= CONCAT(CURDATE(), ' 07:30:00') AND startTime < CONCAT(CURDATE(), ' 16:00:00')"
@@ -86,8 +86,8 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
 
         echarts_data["stop_half"] = stop_half_result
         echarts_data["sort_result"] = sort_result
-        logging.info(f"stop_half_sql: {stop_half_sql}")
-        logging.info(f"stop_sort_sql: {stop_sort_sql}")
+        # logging.info(f"stop_half_sql: {stop_half_sql}")
+        # logging.info(f"stop_sort_sql: {stop_sort_sql}")
         # logging.info(echarts_data)
         logging.info(f"{table_name}班次数据获取成功")
         return echarts_data

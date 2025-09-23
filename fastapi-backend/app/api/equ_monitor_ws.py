@@ -15,9 +15,10 @@ from config import tdengine_config, point_map
 from config.mysql_config import shucai
 from schemas.equ_bending import QueryEquBending, ResponseEquStatus
 import pymysql
-from config.point_map import get_all_tablepoint,table_map
+from config.point_map import get_all_tablepoint, table_map
 from schemas.websocket_connect import ConnectionManager
 from models.models import *
+
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 
@@ -139,61 +140,140 @@ async def query_equipment_params(equipment_name: str) -> Dict[str, str | None] |
             if param_results.get("status"):
                 logging.info(f"{equipment_name}的参数status: {param_results['status']}")
                 # 获取状态的值
-                if param_results["status"] == -1:
+                if param_results["status"] == 1:
                     param_results["status"] = "运行"
                     return param_results
-                elif param_results["status"]=='运行':
+                elif param_results["status"] == 3:
+                    fault_data = await FaultPointMap.filter(
+                        mchCode=mach_code, faultId=param_results["fault_id"]
+                    ).first()
+                    param_results["status"] = fault_data.faultName
+                    logging.info(f"{equipment_name}的故障名称: {fault_data.faultName}")
                     return param_results
                 else:
-                    fault_data = await FaultPointMap.filter(mchCode=mach_code,faultId=param_results["status"]).first()
-                    if fault_data:
-                        stop_reason = fault_data.faultName
-                        param_results["status"] = stop_reason
-                        logging.info(f"{equipment_name}的故障名称: {stop_reason}")
-                    else:
-                        stop_reason = "未知"
-                        param_results["status"] = stop_reason
-                        logging.info(f"{equipment_name}的故障名称: {stop_reason}")
-                    
+                    param_results["status"] = "未知"
                     return param_results
-
             # 如果没有查询结果，返回默认状态
             return param_results
 
         elif "包装机" in equipment_name:
 
             param_results = await get_equ_params(equipment_name)
+            logging.info(f"{equipment_name}的参数: {param_results}")
             # 获取主机和辅机的状态
             main_status = param_results.get("main_status")
             auxiliary_status = param_results.get("auxiliary_status")
-            if main_status and auxiliary_status:
-                if main_status == auxiliary_status and main_status in ("生产", "运行"):
+            if "tiao_status" in param_results:
+                tiao_status = param_results.get("tiao_status")
+                if (
+                    main_status == tiao_status
+                    and tiao_status == auxiliary_status
+                    and main_status == 1
+                ):
                     del param_results["main_status"]
                     del param_results["auxiliary_status"]
+                    del param_results["tiao_status"]
                     param_results["status"] = "运行"
                     return param_results
-                elif (
-                    main_status in ("生产", "运行") and auxiliary_status != main_status
-                ):
-                    del param_results["main_status"]
-                    del param_results["auxiliary_status"]
-                    param_results["status"] = f"辅机故障：{auxiliary_status}"
-                    return param_results
-                elif (
-                    auxiliary_status in ("生产", "运行")
-                    and main_status != auxiliary_status
-                ):
-                    del param_results["main_status"]
-                    del param_results["auxiliary_status"]
-                    param_results["status"] = f"主机故障：{main_status}"
-                    return param_results
                 else:
+                    # 检查哪些状态等于3（故障状态）
+                    fault_messages = []
+                    if main_status == 3:
+                        fault_data = await FaultPointMap.filter(
+                            mchCode=mach_code, faultId=param_results["main_fault_id"]
+                        ).first()
+                        fault_messages.append(f"主机发生故障:{fault_data.faultName}")
+                    if auxiliary_status == 3:
+                        fault_data = await FaultPointMap.filter(
+                            mchCode=mach_code,
+                            faultId=param_results["auxiliary_fault_id"],
+                        ).first()
+                        fault_messages.append(f"辅机发生故障:{fault_data.faultName}")
+                    if tiao_status == 3:
+                        fault_data = await FaultPointMap.filter(
+                            mchCode=mach_code, faultId=param_results["tiao_fault_id"]
+                        ).first()
+                        fault_messages.append(f"条机发生故障:{fault_data.faultName}")
+
                     del param_results["main_status"]
                     del param_results["auxiliary_status"]
-                    param_results["status"] = (
-                        f"主机故障：{main_status},辅机故障：{auxiliary_status}"
-                    )
+                    del param_results["tiao_status"]
+
+                    if fault_messages:
+                        param_results["status"] = ",".join(fault_messages)
+                        logging.info(
+                            f"{equipment_name}的故障名称: {param_results['status']}"
+                        )
+                    else:
+                        param_results["status"] = (
+                            f"主机状态：{main_status},辅机状态：{auxiliary_status},条机状态：{tiao_status}"
+                        )
                     return param_results
+            else:
+                if main_status and auxiliary_status:
+                    if main_status == auxiliary_status and main_status == 1:
+                        del param_results["main_status"]
+                        del param_results["auxiliary_status"]
+                        param_results["status"] = "运行"
+                        return param_results
+                    else:
+                        # 检查哪些状态等于3（故障状态）
+                        fault_messages = []
+                        if main_status == 3:
+                            fault_data = await FaultPointMap.filter(
+                                mchCode=mach_code,
+                                faultId=param_results["main_fault_id"],
+                            ).first()
+                            fault_messages.append(
+                                f"主机发生故障:{fault_data.faultName}"
+                            )
+                        if auxiliary_status == 3:
+                            fault_data = await FaultPointMap.filter(
+                                mchCode=mach_code,
+                                faultId=param_results["auxiliary_fault_id"],
+                            ).first()
+                            fault_messages.append(
+                                f"辅机发生故障:{fault_data.faultName}"
+                            )
+
+                        del param_results["main_status"]
+                        del param_results["auxiliary_status"]
+
+                        if fault_messages:
+                            param_results["status"] = ",".join(fault_messages)
+                        else:
+                            param_results["status"] = (
+                                f"主机状态：{main_status},辅机状态：{auxiliary_status}"
+                            )
+                        return param_results
+            # if main_status and auxiliary_status:
+            #     if main_status == auxiliary_status and main_status in ("生产", "运行"):
+            #         del param_results["main_status"]
+            #         del param_results["auxiliary_status"]
+            #         param_results["status"] = "运行"
+            #         return param_results
+            #     elif (
+            #         main_status in ("生产", "运行") and auxiliary_status != main_status
+            #     ):
+            #         del param_results["main_status"]
+            #         del param_results["auxiliary_status"]
+            #         param_results["status"] = f"辅机故障：{auxiliary_status}"
+            #         return param_results
+            #     elif (
+            #         auxiliary_status in ("生产", "运行")
+            #         and main_status != auxiliary_status
+            #     ):
+            #         del param_results["main_status"]
+            #         del param_results["auxiliary_status"]
+            #         param_results["status"] = f"主机故障：{main_status}"
+            #         return param_results
+            #     else:
+            #         del param_results["main_status"]
+            #         del param_results["auxiliary_status"]
+            #         param_results["status"] = (
+            #             f"主机故障：{main_status},辅机故障：{auxiliary_status}"
+            #         )
+            #         return param_results
         else:
             raise HTTPException(status_code=400, detail="设备名称错误！")
 

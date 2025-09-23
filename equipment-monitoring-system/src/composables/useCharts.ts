@@ -4,6 +4,7 @@ import * as echarts from 'echarts'
 import { getMultipleRandomFaultNames } from '../data/faultNames'
 import { createEChartsWebSocketService } from '../services/echartsWebSocket'
 import { createEChartsHttpService, type EChartsPostData, type EChartsPostParams } from '../services/echartsHttp'
+import { getCurrentShiftByTime } from '@/utils/shiftTimeUtils'
 
 interface ChartFilters {
   dateRange: [Date, Date]
@@ -203,27 +204,11 @@ export function useCharts() {
   // 连接WebSocket
   const connectWebSocket = async (equipmentName: string, classShift: string) => {
     try {
-      // 优先使用从设备监控WebSocket获取的班次信息
-      const storedClassLabel = localStorage.getItem('currentClassLabel')
-      let finalClassShift = classShift
+      // 直接使用基于当前时间的班次判断，不再依赖WebSocket的classlabel
+      const currentShift = getCurrentShiftByTime()
+      const finalClassShift = currentShift.name
       
-      if (storedClassLabel) {
-        const classLabel = parseInt(storedClassLabel)
-        switch (classLabel) {
-          case 1:
-            finalClassShift = '早班'
-            break
-          case 2:
-            finalClassShift = '中班'
-            break
-          case 3:
-            finalClassShift = '晚班'
-            break
-          default:
-            finalClassShift = '早班' // 默认值
-        }
-        console.log(`[ECharts] 使用从设备监控WebSocket获取的班次信息: ${finalClassShift} (classLabel: ${classLabel})`)
-      }
+      console.log(`[ECharts] 使用基于时间的班次判断: ${finalClassShift} (当前时间: ${new Date().toLocaleTimeString()})`)
       
       // 如果已经连接到相同的设备和班次，先断开连接
       if (isWebSocketConnected.value && currentEquipmentName.value === equipmentName && currentClassShift.value === finalClassShift) {

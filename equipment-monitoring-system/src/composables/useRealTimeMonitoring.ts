@@ -8,6 +8,24 @@ import {
 import { createWebSocketService } from '../services/websocket'
 import { useMonitoringStore } from '../stores/monitoring'
 
+interface WebSocketData {
+  status?: string
+  [key: string]: unknown
+}
+
+interface WebSocketConnectedData {
+  equipmentName: string
+}
+
+interface WebSocketDisconnectedData {
+  event: CloseEvent
+  equipmentName: string
+}
+
+interface WebSocketErrorData {
+  error: Event | Error
+}
+
 interface BoundDeviceInfo {
   type: string
   number: string | number
@@ -20,7 +38,7 @@ export function useRealTimeMonitoring(
   boundDeviceInfo: Ref<BoundDeviceInfo | null>,
   deviceStatus: Ref<'running' | 'stopped' | 'fault'>,
   faultName: Ref<string>,
-  currentDeviceParams: Ref<any>,
+  currentDeviceParams: Ref<Record<string, string> | null>,
   onFaultDetected?: () => Promise<void>
 ) {
   // 获取全局监控状态管理
@@ -31,6 +49,10 @@ export function useRealTimeMonitoring(
   // 监控状态
   const isMonitoring = ref(false)
   const wsService = createWebSocketService()
+  
+  // 防抖相关状态
+  const isRefreshing = ref(false)
+  const lastRefreshTime = ref(0)
   
   // 监控统计
   const monitoringStats = ref({
@@ -121,7 +143,7 @@ export function useRealTimeMonitoring(
   }
 
   // 处理WebSocket消息
-  const handleWebSocketMessage = (data: any) => {
+  const handleWebSocketMessage = (data: WebSocketData) => {
     if (!isDeviceBound.value || !boundDeviceInfo.value) {
       return
     }
@@ -158,19 +180,14 @@ export function useRealTimeMonitoring(
       return
     }
 
-    // 从WebSocket消息中获取设备状态和班次信息
+    // 从WebSocket消息中获取设备状态信息
     const status = data.status || '未知状态'
-    const classLabel = data.classlabel || data.class_label || 1 // 默认为1（早班）
-    
-    // 将班次信息存储到localStorage和monitoringStore中
-    localStorage.setItem('currentClassLabel', classLabel.toString())
-    monitoringStore.setCurrentClassLabel(classLabel)
     
     // 更新统计信息
     monitoringStats.value.lastCheckTime = new Date().toLocaleTimeString()
     monitoringStats.value.totalChecks++
     
-    console.log(`[设备监控] ${equipmentName.value} 状态: ${status}, 班次: ${classLabel}`)
+    console.log(`[设备监控] ${equipmentName.value} 状态: ${status}`)
     
     const isFaulty = isEquipmentFaulty(status)
     const currentFaultName = extractFaultName(status)
@@ -214,10 +231,8 @@ export function useRealTimeMonitoring(
         
         localStorage.setItem('faultName', faultName.value)
         
-        // 更新全局故障警告
-        if (monitoringStore.currentFaultAlert) {
-          monitoringStore.updateFaultAlertName(monitoringStore.currentFaultAlert.id, currentFaultName)
-        }
+        // 更新全局故障警告 - 重新创建故障警告以更新故障名称
+        monitoringStore.createFaultAlert(currentFaultName)
         
         ElMessage.warning(`故障类型变更: ${currentFaultName}`)
         
@@ -264,22 +279,22 @@ export function useRealTimeMonitoring(
   }
 
   // 处理WebSocket连接事件
-  const handleWebSocketConnected = (data: any) => {
+  const handleWebSocketConnected = (data: WebSocketConnectedData) => {
     console.log(`[设备监控] WebSocket连接成功: ${data.equipmentName}`)
     monitoringStats.value.connectionStatus = '已连接'
     ElMessage.success('实时监控连接成功')
   }
 
   // 处理WebSocket断开事件
-  const handleWebSocketDisconnected = (data: any) => {
+  const handleWebSocketDisconnected = (data: WebSocketDisconnectedData) => {
     console.log(`[设备监控] WebSocket连接断开: ${data.equipmentName}`)
     monitoringStats.value.connectionStatus = '连接断开'
     ElMessage.warning('实时监控连接断开，正在尝试重连...')
   }
 
   // 处理WebSocket错误事件
-  const handleWebSocketError = (error: any) => {
-    console.error('[设备监控] WebSocket错误:', error)
+  const handleWebSocketError = (data: WebSocketErrorData) => {
+    console.error('[设备监控] WebSocket错误:', data.error)
     monitoringStats.value.connectionStatus = '连接错误'
     ElMessage.error('实时监控连接错误')
   }
@@ -301,7 +316,13 @@ export function useRealTimeMonitoring(
       connectionStatus: '连接中...'
     }
     
-    // 设置WebSocket事件监听器
+    // 确保先清理之前的事件监听器，避免重复绑定
+    wsService.off('message', handleWebSocketMessage)
+    wsService.off('connected', handleWebSocketConnected)
+    wsService.off('disconnected', handleWebSocketDisconnected)
+    wsService.off('error', handleWebSocketError)
+    
+    // 重新设置WebSocket事件监听器
     wsService.on('message', handleWebSocketMessage)
     wsService.on('connected', handleWebSocketConnected)
     wsService.on('disconnected', handleWebSocketDisconnected)
@@ -320,11 +341,17 @@ export function useRealTimeMonitoring(
         shift: boundDeviceInfo.value.shift
       }, equipmentName.value)
       
-      ElMessage.success('已开始实时监控设备状态')
+      console.log(`[设备监控] 设备 ${equipmentName.value} 监控已启动`)
     } catch (error) {
       console.error('[设备监控] WebSocket连接失败:', error)
       ElMessage.error('实时监控连接失败')
       monitoringStats.value.connectionStatus = '连接失败'
+      
+      // 连接失败时清理事件监听器
+      wsService.off('message', handleWebSocketMessage)
+      wsService.off('connected', handleWebSocketConnected)
+      wsService.off('disconnected', handleWebSocketDisconnected)
+      wsService.off('error', handleWebSocketError)
     }
   }
 
@@ -367,24 +394,96 @@ export function useRealTimeMonitoring(
     ElMessage.info('已停止设备状态监控')
   }
 
-  // 手动刷新状态
+  // 手动刷新状态（带防抖机制）
   const refreshStatus = async () => {
     if (!isDeviceBound.value) {
       ElMessage.warning('请先绑定设备')
       return
     }
     
-    if (!isMonitoring.value) {
-      // 如果没有在监控，则启动监控
-      await startMonitoring()
-    } else {
-      // 如果已经在监控，则重新连接WebSocket
-      stopMonitoring()
-      await new Promise(resolve => setTimeout(resolve, 500)) // 等待500ms确保连接完全断开
-      await startMonitoring()
+    // 防抖检查：3秒内只允许一次刷新操作
+    const now = Date.now()
+    const debounceTime = 3000 // 3秒防抖
+    
+    if (isRefreshing.value) {
+      ElMessage.warning('正在刷新中，请稍候...')
+      return
     }
     
-    ElMessage.success('设备状态已刷新')
+    if (now - lastRefreshTime.value < debounceTime) {
+      const remaining = Math.ceil((debounceTime - (now - lastRefreshTime.value)) / 1000)
+      ElMessage.warning(`请等待 ${remaining} 秒后再试`)
+      return
+    }
+    
+    isRefreshing.value = true
+    lastRefreshTime.value = now
+    
+    try {
+      if (!isMonitoring.value) {
+        // 如果没有在监控，则启动监控
+        await startMonitoring()
+      } else {
+        // 如果已经在监控，则安全地重新连接WebSocket
+        console.log('[设备监控] 开始安全重连...')
+        await safeReconnect()
+      }
+      
+      ElMessage.success('设备状态已刷新')
+    } catch (error) {
+      console.error('[设备监控] 刷新失败:', error)
+      ElMessage.error('刷新失败，请稍后再试')
+    } finally {
+      // 延迟重置刷新状态，避免用户过快再次点击
+      setTimeout(() => {
+        isRefreshing.value = false
+      }, 1000)
+    }
+  }
+
+  // 安全重连WebSocket
+  const safeReconnect = async () => {
+    // 标记为手动重连，避免自动重连干扰
+    const originalAllowReconnect = wsService.reconnectAllowed
+    
+    try {
+      // 临时禁用自动重连
+      wsService.reconnectAllowed = false
+      
+      // 先移除所有事件监听器
+      wsService.off('message', handleWebSocketMessage)
+      wsService.off('connected', handleWebSocketConnected)  
+      wsService.off('disconnected', handleWebSocketDisconnected)
+      wsService.off('error', handleWebSocketError)
+      
+      // 强制断开连接
+      wsService.disconnect()
+      
+      // 重置监控状态
+      isMonitoring.value = false
+      monitoringStats.value.connectionStatus = '重连中...'
+      
+      // 等待足够时间确保连接完全断开
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      console.log('[设备监控] 开始重新建立连接...')
+      
+      // 重新开始监控
+      await startMonitoring()
+      
+    } catch (error) {
+      console.error('[设备监控] 安全重连失败:', error)
+      ElMessage.error('重连失败，请稍后再试')
+      
+      // 恢复原始的重连设置
+      wsService.reconnectAllowed = originalAllowReconnect
+      
+      // 确保监控状态正确
+      isMonitoring.value = false
+      monitoringStats.value.connectionStatus = '连接失败'
+      
+      throw error
+    }
   }
 
   // 监听设备绑定状态变化
@@ -432,6 +531,7 @@ export function useRealTimeMonitoring(
     stopMonitoring,
     refreshStatus,
     setSimulatedFault,
-    updateDeviceParams
+    updateDeviceParams,
+    isRefreshing
   }
 }

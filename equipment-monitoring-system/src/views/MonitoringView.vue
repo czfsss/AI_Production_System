@@ -14,6 +14,8 @@ import { useCharts } from '@/composables/useCharts'
 import { useFaultAnalysis } from '@/composables/useFaultAnalysis'
 import { useShiftAnalysis } from '@/composables/useShiftAnalysis'
 import { useFaultRecords } from '@/composables/useFaultRecords'
+// 导入班次时间工具函数
+import { getCurrentShiftByTime, getShiftNameByCode } from '@/utils/shiftTimeUtils'
 
 // 初始化认证相关功能
 const { showLoginPrompt, requireAuth, openLoginDialog } = useAuth()
@@ -45,6 +47,7 @@ const {
   stopMonitoring,
   refreshStatus,
   simulateDeviceFault,
+  isRefreshing: isDeviceRefreshing,
 } = useDeviceBinding(requireAuth, async () => {
   // 故障检测回调，调用AI分析
   if (analyzeFaultFunction.value) {
@@ -70,7 +73,7 @@ const {
   chart4Ref,
   chart5Ref,
   chartFilters,
-  isRefreshing,
+  isRefreshing: isChartsRefreshing,
   initCharts,
   refreshCharts,
   startAutoRefresh,
@@ -225,74 +228,21 @@ watch(
   }
 )
 
-// 将班次代码转换为班次名称
+// 将班次代码转换为班次名称 - 现在优先使用时间判断
 const getClassShiftByShift = (shiftCode: string): string => {
-  // 优先使用从设备监控WebSocket获取的班次信息
-  const storedClassLabel = localStorage.getItem('currentClassLabel')
-  if (storedClassLabel) {
-    const classLabel = parseInt(storedClassLabel)
-    switch (classLabel) {
-      case 1:
-        return '早班'
-      case 2:
-        return '中班'
-      case 3:
-        return '晚班'
-      default:
-        return '早班' // 默认返回早班
-    }
-  }
-  
-  // 如果没有从WebSocket获取的班次信息，则使用原始逻辑
-  switch (shiftCode) {
-    case 'A':
-      return '早班'
-    case 'B':
-      return '中班'
-    case 'C':
-      return '晚班'
-    default:
-      return '早班' // 默认返回早班
-  }
+  // 优先使用基于当前时间的班次判断
+  const currentShift = getCurrentShiftByTime()
+  return currentShift.name
 }
 
-// 将班次标签转换为班次名称（1=白班，2=中班，3=晚班）
+// 将班次标签转换为班次名称 - 现在优先使用时间判断
 const getShiftNameByClassLabel = (): string => {
-  // 优先从 monitoringStore 获取
-  const currentClassLabel = monitoringStore.currentClassLabel
-  if (currentClassLabel) {
-    switch (currentClassLabel) {
-      case 1:
-        return '白班'
-      case 2:
-        return '中班'
-      case 3:
-        return '晚班'
-      default:
-        return '白班' // 默认返回白班
-    }
-  }
-  
-  // 如果 store 中没有，从 localStorage 获取
-  const storedClassLabel = localStorage.getItem('currentClassLabel')
-  if (storedClassLabel) {
-    const classLabel = parseInt(storedClassLabel)
-    switch (classLabel) {
-      case 1:
-        return '白班'
-      case 2:
-        return '中班'
-      case 3:
-        return '晚班'
-      default:
-        return '白班' // 默认返回白班
-    }
-  }
-  
-  return '白班' // 默认返回白班
+  // 优先使用基于当前时间的班次判断
+  const currentShift = getCurrentShiftByTime()
+  return currentShift.name
 }
 
-// 将故障记录中的班次值转换为班次名称
+// 将故障记录中的班次值转换为班次名称 - 历史数据仍使用存储值，当前数据使用时间判断
 const getShiftNameFromClassShift = (classShift: string | number): string => {
   // 处理数字或字符串形式的班次值
   const shiftValue = typeof classShift === 'string' ? parseInt(classShift) : classShift
@@ -302,26 +252,21 @@ const getShiftNameFromClassShift = (classShift: string | number): string => {
     return classShift?.toString() || '未知'
   }
   
-  switch (shiftValue) {
-    case 1:
-      return '白班'
-    case 2:
-      return '中班'
-    case 3:
-      return '晚班'
-    default:
-      return classShift?.toString() || '未知'
-  }
+  // 使用新的班次名称映射
+  return getShiftNameByCode(shiftValue)
 }
 
 // 将班组名称转换为枚举值
 const convertShiftToEnum = (shiftName: string): string => {
   switch (shiftName) {
     case '甲班':
+    case 'jia':
       return '01'
     case '乙班':
+    case 'yi':
       return '02'
     case '丙班':
+    case 'bing':
       return '03'
     default:
       return '01' // 默认返回甲班
@@ -688,8 +633,14 @@ onUnmounted(() => {
                   <el-button v-if="isMonitoring" type="warning" @click="() => { stopMonitoring(); monitoringStore.setMonitoringStatus(false); }" size="small"
                     >停止监控</el-button
                   >
-                  <el-button v-if="isMonitoring" type="info" @click="refreshStatus" size="small"
-                    >刷新状态</el-button
+                  <el-button 
+                    v-if="isMonitoring" 
+                    type="info" 
+                    @click="refreshStatus" 
+                    size="small"
+                    :loading="isDeviceRefreshing"
+                    :disabled="isDeviceRefreshing"
+                    >{{ isDeviceRefreshing ? '刷新中...' : '刷新状态' }}</el-button
                   >
                   <el-button type="danger" @click="() => { unbindDevice(); monitoringStore.setDeviceBinding(false); }" size="small">解绑设备</el-button>
                 </div>
@@ -851,7 +802,7 @@ onUnmounted(() => {
                 <el-button
                   type="primary"
                   @click="refreshCharts"
-                  :loading="isRefreshing"
+                  :loading="isChartsRefreshing"
                   icon="Refresh"
                 >
                   刷新数据
