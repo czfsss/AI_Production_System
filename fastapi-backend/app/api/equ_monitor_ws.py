@@ -15,9 +15,9 @@ from config import tdengine_config, point_map
 from config.mysql_config import shucai
 from schemas.equ_bending import QueryEquBending, ResponseEquStatus
 import pymysql
-from config.point_map import get_all_tablepoint
+from config.point_map import get_all_tablepoint,table_map
 from schemas.websocket_connect import ConnectionManager
-
+from models.models import *
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 
@@ -129,6 +129,7 @@ async def query_equipment_params(equipment_name: str) -> Dict[str, str | None] |
     """
     查询设备状态，与原有接口逻辑相同
     """
+    mach_code = table_map.get(equipment_name)
     try:
         if "卷烟机" in equipment_name:
             # 获取设备的所有参数值
@@ -136,23 +137,25 @@ async def query_equipment_params(equipment_name: str) -> Dict[str, str | None] |
             # logging.info(f"{equipment_name}的参数: {param_results}")
             # 获取状态值进行设备状态判断（保持与原逻辑一致）
             if param_results.get("status"):
+                logging.info(f"{equipment_name}的参数status: {param_results['status']}")
                 # 获取状态的值
-                if param_results["status"] == 1:
+                if param_results["status"] == -1:
                     param_results["status"] = "运行"
                     return param_results
-                elif param_results["status"] == 3:
-                    # 获取设备ID用于查询停机历史
-                    all_tablepoint = await get_all_tablepoint(equipment_name)
-                    equipment_id = all_tablepoint["status"].split("_")[0]
-                    stop_reason = await query_stop_history(equipment_id)
-                    logging.info(stop_reason)
-                    if stop_reason:
-                        param_results["status"] = stop_reason
-                    else:
-                        param_results["status"] = "发生故障:未知"
+                elif param_results["status"]=='运行':
                     return param_results
-                # 其他状态值直接返回
-                return param_results
+                else:
+                    fault_data = await FaultPointMap.filter(mchCode=mach_code,faultId=param_results["status"]).first()
+                    if fault_data:
+                        stop_reason = fault_data.faultName
+                        param_results["status"] = stop_reason
+                        logging.info(f"{equipment_name}的故障名称: {stop_reason}")
+                    else:
+                        stop_reason = "未知"
+                        param_results["status"] = stop_reason
+                        logging.info(f"{equipment_name}的故障名称: {stop_reason}")
+                    
+                    return param_results
 
             # 如果没有查询结果，返回默认状态
             return param_results

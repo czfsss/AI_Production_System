@@ -86,8 +86,8 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
 
         echarts_data["stop_half"] = stop_half_result
         echarts_data["sort_result"] = sort_result
-        # logging.info(f"stop_half_sql: {stop_half_sql}")
-        # logging.info(f"stop_sort_sql: {stop_sort_sql}")
+        logging.info(f"stop_half_sql: {stop_half_sql}")
+        logging.info(f"stop_sort_sql: {stop_sort_sql}")
         # logging.info(echarts_data)
         logging.info(f"{table_name}班次数据获取成功")
         return echarts_data
