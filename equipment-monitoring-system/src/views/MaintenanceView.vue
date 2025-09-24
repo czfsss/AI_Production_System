@@ -7,13 +7,13 @@ import { Box, Clock } from '@element-plus/icons-vue'
     <div class="maintenance-container">
       <!-- 智能故障问答 -->
       <div class="card chat-section">
-
         <div class="iframe-container">
           <iframe
             src="http://10.43.32.231:1130/chatbot/6hr5ONUo1BedoEpo"
-            style="width: 100%; height: 100%; min-height: 700px; border: none;"
+            style="width: 100%; height: 100%; min-height: 700px; border: none"
             frameborder="0"
-            allow="microphone">
+            allow="microphone"
+          >
           </iframe>
         </div>
       </div>
@@ -28,14 +28,20 @@ import { Box, Clock } from '@element-plus/icons-vue'
           <div class="feature-card">
             <el-icon class="feature-icon" size="48"><Box /></el-icon>
             <p class="placeholder-text">备件库查询功能正在开发中</p>
-            <p class="feature-list">
-              该功能将支持：
-            </p>
+            <p class="feature-list">该功能将支持：</p>
             <ul>
-              <li><el-icon><CircleCheck /></el-icon>备件库存查询</li>
-              <li><el-icon><CircleCheck /></el-icon>备件规格查看</li>
-              <li><el-icon><CircleCheck /></el-icon>库存预警提醒</li>
-              <li><el-icon><CircleCheck /></el-icon>备件申领流程</li>
+              <li>
+                <el-icon><CircleCheck /></el-icon>备件库存查询
+              </li>
+              <li>
+                <el-icon><CircleCheck /></el-icon>备件规格查看
+              </li>
+              <li>
+                <el-icon><CircleCheck /></el-icon>库存预警提醒
+              </li>
+              <li>
+                <el-icon><CircleCheck /></el-icon>备件申领流程
+              </li>
             </ul>
           </div>
         </div>
@@ -102,7 +108,7 @@ import { Box, Clock } from '@element-plus/icons-vue'
   display: flex;
   align-items: center;
   gap: 6px;
-  color: rgba(255,255,255,0.85);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 13px;
 }
 
@@ -173,7 +179,7 @@ li {
   .maintenance-container {
     flex-direction: column;
   }
-  
+
   .card {
     min-height: 550px;
   }

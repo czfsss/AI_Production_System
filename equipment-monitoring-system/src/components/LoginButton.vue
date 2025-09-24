@@ -220,7 +220,7 @@ const handleRegister = async (e: Event) => {
   <div class="login-container">
     <!-- 未登录状态显示登录按钮 -->
     <div v-if="!authStore.isLoggedIn">
-      <button class="btn" @click="openLoginDialog">
+      <button class="btn" @click="$router.push('/login')">
         登录
       </button>
     </div>

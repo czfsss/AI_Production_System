@@ -233,49 +233,8 @@ export function useCharts() {
   const updateChart2WithRealData = () => {
     if (!chart2Instance) return
     
-    // 如果没有WebSocket数据，显示空图表
+    // 如果没有WebSocket数据，不更新图表（由模板条件渲染处理）
     if (!websocketData.value.stop_half.length) {
-      const option = {
-        title: { text: '本班故障停机时长统计', left: 'center', textStyle: { fontSize: 16 } },
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'shadow' }
-        },
-        toolbox: {
-          feature: {
-            magicType: { type: ['line', 'bar'] },
-            restore: {},
-            saveAsImage: {}
-          }
-        },
-        grid: { top: '20%', right: '3%', left: '3%', bottom: '20%', containLabel: true },
-        xAxis: {
-          type: 'category',
-          data: [],
-          axisLabel: { 
-            rotate: 45,
-            fontSize: 10,
-            interval: 0
-          }
-        },
-        yAxis: {
-          type: 'value',
-          name: '停机时长(分钟)'
-        },
-        series: [{
-          type: 'bar',
-          smooth: true,
-          data: [],
-          itemStyle: {
-            borderRadius: [4, 4, 0, 0],
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#FF8A80' },
-              { offset: 1, color: '#FF5252' }
-            ])
-          },
-        }]
-      }
-      chart2Instance.setOption(option)
       return
     }
     
@@ -329,69 +288,8 @@ export function useCharts() {
   const updateChart3WithRealData = () => {
     if (!chart3Instance) return
     
-    // 如果没有WebSocket数据，显示空图表
+    // 如果没有WebSocket数据，不更新图表（由模板条件渲染处理）
     if (!websocketData.value.sort_result.length) {
-      const option = {
-        title: { text: '本班故障分类统计', left: 'center', textStyle: { fontSize: 16 } },
-        tooltip: {
-          trigger: 'item',
-          formatter: '{a} <br/>{b}: {c} ({d}%)',
-          textStyle: {
-            fontSize: 12
-          }
-        },
-        legend: {
-          orient: 'horizontal',
-          bottom: '5%',
-          left: 'center',
-          textStyle: {
-            fontSize: 10
-          },
-          formatter: function(name: string) {
-            // 截断过长的故障名称
-            return name.length > 15 ? name.substring(0, 15) + '...' : name
-          }
-        },
-        grid: { top: '20%', right: '3%', left: '3%', bottom: '15%', containLabel: true },
-        series: [{
-          name: '故障次数',
-          type: 'pie',
-          radius: ['30%', '60%'], // 改为环形图，节省空间
-          center: ['50%', '45%'], // 居中显示，向上偏移一点给底部图例留空间
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: {
-            show: true,
-            formatter: '{c}次',
-            position: 'outside',
-            fontSize: 10
-          },
-          emphasis: {
-            label: {
-              show: true,
-              fontSize: 12,
-              fontWeight: 'bold'
-            },
-            itemStyle: {
-              shadowBlur: 10,
-              shadowOffsetX: 0,
-              shadowColor: 'rgba(0, 0, 0, 0.5)'
-            }
-          },
-          labelLine: {
-            show: true,
-            length: 8,
-            length2: 12,
-            maxSurfaceAngle: 80
-          },
-          data: [],
-          color: ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#DDA0DD'] // 新的颜色方案
-        }]
-      }
-      chart3Instance.setOption(option)
       return
     }
     

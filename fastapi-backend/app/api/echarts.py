@@ -39,11 +39,15 @@ manager = ConnectionManager()
 async def get_echarts_data(equ_name: str, class_shift: Shift):
     echarts_data = {}
     table_name_dict = await get_all_tablepoint(equ_name)
-    table_name = table_name_dict["status"].split("_")[0]
+    table_name = ""
+ 
     if "卷烟机" in equ_name:
+        table_name = table_name_dict["status"].split("_")[0]
         params, value = await execute_single_query("fault_counts", table_name+"_50011")
         echarts_data[params] = value
         logging.info(f"fault_counts:{value}")
+    else:
+        table_name = table_name_dict["main_status"].split("_")[0]
     # 根据班次设置时间条件
     if class_shift == Shift.DAY.value:  # 早班
         time_condition = "startTime >= CONCAT(CURDATE(), ' 07:30:00') AND startTime < CONCAT(CURDATE(), ' 16:00:00')"
@@ -104,6 +108,8 @@ async def get_echarts_data_all(query_params: QueryEchartsData):
     if query_params.class_group:
         class_group = f"AND classGroup = '{query_params.class_group.value}'"
         planstart_group = f"AND pl.planStartGroup = '{query_params.class_group.value}'"
+    if "包装机" in query_params.equ_name:
+        query_params.equ_name = query_params.equ_name.replace("包装机", "卷接机")
     echarts_data_all = {}
     fault_counts_sql = f"""
         SELECT 

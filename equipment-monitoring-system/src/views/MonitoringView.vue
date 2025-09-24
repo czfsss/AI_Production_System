@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { VideoPlay, VideoPause, Warning, Loading, Clock } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
@@ -188,11 +188,33 @@ watch([activeTab, faultDashboardTab], ([newActiveTab, newFaultDashboardTab]) => 
 // 监听登录状态变化，显示登录成功提示
 const authStore = useAuthStore()
 const monitoringStore = useMonitoringStore()
+
+// 添加页面加载状态
+const isPageLoading = ref(false)
+
 watch(
   () => authStore.isLoggedIn,
   (newValue, oldValue) => {
     if (newValue === true && oldValue === false) {
-      ElMessage.success('登录成功！欢迎使用设备监控系统')
+      // 显示页面加载动画
+      isPageLoading.value = true
+      
+      // 延迟显示欢迎信息，让页面有时间渲染
+      setTimeout(() => {
+        ElMessage({
+          message: `欢迎回来，${authStore.userInfo?.nickname || '用户'}！`,
+          type: 'success',
+          duration: 3000,
+          showClose: true,
+          center: false,
+          offset: 0
+        })
+        
+        // 关闭加载状态
+        setTimeout(() => {
+          isPageLoading.value = false
+        }, 800)
+      }, 300)
     }
   },
   { immediate: false },
@@ -275,37 +297,25 @@ const convertShiftToEnum = (shiftName: string): string => {
 
 // 计算当班总停机次数
 const calculateTotalFaults = (): number => {
-  // 优先使用WebSocket数据中的故障次数
+  // 优先使用WebSocket数据中的故障次数（这是实时的当班数据）
   if (websocketData.value.sort_result && websocketData.value.sort_result.length > 0) {
     return websocketData.value.sort_result.reduce((total, item) => total + (item.故障次数 || 0), 0)
   }
   
-  // 如果WebSocket数据不可用，则使用HTTP数据
-  if (!httpData.value.fault_counts || httpData.value.fault_counts.length === 0) {
-    return 0
-  }
-  
-  // 根据当前选择的班组筛选数据，如果没有选择班组则计算所有班组
-  let filteredData = chartFilters.shift 
-    ? httpData.value.fault_counts.filter(item => item.班组 === chartFilters.shift)
-    : httpData.value.fault_counts
-  
-  // 根据日期范围筛选数据
-  if (chartFilters.dateRange && chartFilters.dateRange.length === 2) {
-    const startDate = new Date(chartFilters.dateRange[0])
-    const endDate = new Date(chartFilters.dateRange[1])
-    endDate.setHours(23, 59, 59, 999) // 包含结束日期的整天
-    
-    filteredData = filteredData.filter(item => {
-      if (!item.日期) return false
-      const itemDate = new Date(item.日期)
-      return itemDate >= startDate && itemDate <= endDate
-    })
-  }
-  
-  // 计算总停机次数
-  return filteredData.reduce((total, item) => total + (item.停机次数 || 0), 0)
+  // 如果WebSocket数据不可用，当班停机次数应该为0
+  // 因为WebSocket提供的是当前班次的实时数据，如果没有WebSocket数据，说明当前班次没有停机
+  return 0
 }
+
+// 判断是否有停机数据
+const hasStopData = computed(() => {
+  return websocketData.value.stop_half && websocketData.value.stop_half.length > 0
+})
+
+// 判断是否有故障分类数据
+const hasFaultData = computed(() => {
+  return websocketData.value.sort_result && websocketData.value.sort_result.length > 0
+})
 
 // 监听设备绑定状态变化，管理WebSocket连接和HTTP轮询
 watch([isDeviceBound, equipmentName, shift], ([newIsDeviceBound, newEquipmentName, newShift]) => {
@@ -501,11 +511,39 @@ onMounted(() => {
   // 监听页面刷新事件
   window.addEventListener('load', handlePageRefresh)
 
+  // 处理用户退出登录事件
+  const handleUserLogout = () => {
+    // 停止监控相关活动
+    if (isMonitoring.value) {
+      stopMonitoring()
+    }
+    
+    // 断开WebSocket连接
+    disconnectWebSocket()
+    
+    // 停止HTTP轮询
+    stopHttpPolling()
+    
+    // 停止图表自动刷新
+    stopAutoRefresh()
+    
+    // 重置监控store状态
+    monitoringStore.resetAll()
+    
+    // 切换回监控标签页
+    activeTab.value = 'monitoring'
+    faultDashboardTab.value = 'data-dashboard'
+  }
+
+  // 添加退出登录事件监听器
+  window.addEventListener('user-logout', handleUserLogout)
+
   // 在组件卸载时移除事件监听器
   onUnmounted(() => {
     window.removeEventListener('trigger-fault-analysis', handleFaultAnalysis as EventListener)
     window.removeEventListener('fault-analysis-streaming', handleStreamingAnalysis as EventListener)
     window.removeEventListener('load', handlePageRefresh)
+    window.removeEventListener('user-logout', handleUserLogout)
   })
 
   // 注意：现在使用实时数据监控，不再需要模拟参数更新
@@ -526,10 +564,18 @@ onUnmounted(() => {
 
 <template>
   <div class="monitoring-container">
+    <!-- 页面加载覆盖层 -->
+    <div v-if="isPageLoading" class="page-loading-overlay">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在加载监控系统...</div>
+      </div>
+    </div>
+    
     <!-- 全局故障警告组件 -->
     <GlobalFaultAlert />
     
-    <div class="monitoring-view">
+    <div class="monitoring-view" :class="{ 'page-loading': isPageLoading }">
     <!-- Tab Navigation -->
     <div class="tab-navigation-container">
       <!-- 移动端展开按钮 -->
@@ -547,13 +593,13 @@ onUnmounted(() => {
         </button>
         <button
           :class="['tab-button', { active: activeTab === 'fault-dashboard' }]"
-          @click="activeTab = 'fault-dashboard'"
+          @click="() => { requireAuth(() => { activeTab = 'fault-dashboard' }) }"
         >
           故障看板
         </button>
         <button
           :class="['tab-button', { active: activeTab === 'analysis' }]"
-          @click="activeTab = 'analysis'"
+          @click="() => { requireAuth(() => { activeTab = 'analysis' }) }"
         >
           本班分析
         </button>
@@ -818,10 +864,22 @@ onUnmounted(() => {
                 </div>
                 <div class="chart-row">
                   <div class="chart-item">
-                    <div ref="chart3Ref" class="chart"></div>
+                    <!-- 本班故障分类统计 -->
+                    <div v-if="hasFaultData" ref="chart3Ref" class="chart"></div>
+                    <div v-else class="empty-chart-message">
+                      <div class="empty-chart-icon">📊</div>
+                      <div class="empty-chart-text">当前设备暂无停机数据</div>
+                      <div class="empty-chart-subtext">或数据未更新</div>
+                    </div>
                   </div>
                   <div class="chart-item">
-                    <div ref="chart2Ref" class="chart"></div>
+                    <!-- 本班故障停机时长统计 -->
+                    <div v-if="hasStopData" ref="chart2Ref" class="chart"></div>
+                    <div v-else class="empty-chart-message">
+                      <div class="empty-chart-icon">⏱️</div>
+                      <div class="empty-chart-text">当前设备暂无停机数据</div>
+                      <div class="empty-chart-subtext">或数据未更新</div>
+                    </div>
                   </div>
                 </div>
                 <div class="chart-row">
@@ -3085,6 +3143,38 @@ onUnmounted(() => {
   color: #f56c6c;
 }
 
+/* 空图表提示信息样式 */
+.empty-chart-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  text-align: center;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  border: 2px dashed #dee2e6;
+  padding: 20px;
+}
+
+.empty-chart-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.6;
+}
+
+.empty-chart-text {
+  font-size: 18px;
+  font-weight: 500;
+  color: #6c757d;
+  margin-bottom: 8px;
+}
+
+.empty-chart-subtext {
+  font-size: 14px;
+  color: #adb5bd;
+}
+
 .chart-row {
   display: flex;
   gap: 20px;
@@ -3982,5 +4072,66 @@ onUnmounted(() => {
     transform: translateY(0);
     opacity: 1;
   }
+}
+
+/* 页面加载覆盖层样式 */
+.page-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(79, 172, 254, 0.95) 0%, rgba(0, 242, 254, 0.9) 100%);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.loading-content {
+  text-align: center;
+  color: white;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px auto;
+}
+
+.loading-text {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.monitoring-view.page-loading {
+  opacity: 0.3;
+  pointer-events: none;
 }
 </style>

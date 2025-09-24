@@ -7,9 +7,20 @@ from api.user import user_router
 from api.fault import fault_router
 from api.equ_monitor_ws import websocket_router
 from api.echarts import echarts_router
+from api.oauth2 import oauth2_router
+from fastapi.responses import RedirectResponse
 
 
-app = FastAPI()
+app = FastAPI(
+    title="AI生产系统API",
+    description="具备JWT认证和OAuth2支持的生产监控系统",
+    version="1.0.0",
+)
+
+# 重定向docs
+@app.get("/", summary="重定向到docs")
+async def redirect_to_docs():
+    return RedirectResponse(url="/docs")
 
 # 配置CORS中间件
 app.add_middleware(
@@ -34,6 +45,9 @@ app.include_router(echarts_router, prefix="/api", tags=["Echarts相关API"])
 
 # 注册WebSocket路由
 app.include_router(websocket_router, prefix="/api", tags=["WebSocket相关API"])
+
+# 注册OAuth2路由
+app.include_router(oauth2_router, prefix="/oauth2", tags=["OAuth2认证API"])
 
 
 if __name__ == "__main__":

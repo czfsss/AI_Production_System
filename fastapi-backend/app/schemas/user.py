@@ -38,13 +38,13 @@ class LoginModel(BaseModel):
     )  # 工号 7位数字的字符串
     password: str = Field(description="密码")  # 密码
 
+
 # 修改密码模型
 class UpdatePasswordModel(BaseModel):
-    username: str = Field(description="工号")
     old_password: Optional[str] = Field(None, description="旧密码")
     new_password: str = Field(description="新密码")
     confirm_password: str = Field(description="确认新密码")
-    
+
     @validator("new_password")
     def new_password_must_be_strong(cls, v):
         if len(v) < 8:
@@ -57,12 +57,27 @@ class UpdatePasswordModel(BaseModel):
             raise ValueError("两次输入的密码不一致！")
         return v
 
+
 # 查询模型
 class QueryModel(BaseModel):
     username: str = Field(description="工号")
+
 
 # 登录返回用户信息
 class LoginResponseModel(BaseModel):
     username: str = Field(description="工号")
     nickname: str = Field(description="昵称")
-    password: str = Field(description="密码")
+    create_time: Optional[str] = Field(default=None, description="创建时间")
+
+
+# JWT令牌响应模型
+class TokenResponseModel(BaseModel):
+    access_token: str = Field(description="访问令牌")
+    refresh_token: str = Field(description="刷新令牌")
+    token_type: str = Field(default="bearer", description="令牌类型")
+    user_info: LoginResponseModel = Field(description="用户信息")
+
+
+# 刷新令牌请求模型
+class RefreshTokenModel(BaseModel):
+    refresh_token: str = Field(description="刷新令牌")

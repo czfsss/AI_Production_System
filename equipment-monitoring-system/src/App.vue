@@ -40,46 +40,58 @@ const navigateTo = (moduleKey: string) => {
 
 <template>
   <div class="app-container">
-    <!-- 头部导航 -->
-    <header class="app-header">
-      <div class="header-content">
-        <div class="logo-section">
-          <el-icon size="24"><Monitor /></el-icon>
-          <h1>智能设备监控与维修辅助系统</h1>
-        </div>
-        
-        <!-- 汉堡菜单按钮 -->
-<div class="hamburger-menu" @click="toggleMenu">
-  <span></span>
-  <span></span>
-  <span></span>
-</div>
-
-<nav class="nav-menu" :class="{ expanded: menuExpanded }"><!-- 移动端适配结束 -->
-
-          <div 
-            v-for="module in modules" 
-            :key="module.key"
-            :class="['nav-item', { active: activeModule === module.key }]"
-            @click="navigateTo(module.key)"
-          >
-            <el-icon><component :is="module.icon" /></el-icon>
-            {{ module.name }}
+    <!-- 登录页面时不显示导航栏 -->
+    <template v-if="route.name !== 'login'">
+      <!-- 头部导航 -->
+      <header class="app-header">
+        <div class="header-content">
+          <div class="logo-section">
+            <el-icon size="24"><Monitor /></el-icon>
+            <h1>智能设备监控与维修辅助系统</h1>
           </div>
-        </nav>
+          
+          <!-- 汉堡菜单按钮 -->
+  <div class="hamburger-menu" @click="toggleMenu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
 
-        <!-- 使用登录按钮组件替换原来的用户区域 -->
-        <LoginButton />
-      </div>
-    </header>
+  <nav class="nav-menu" :class="{ expanded: menuExpanded }"><!-- 移动端适配结束 -->
 
-    <!-- 主内容区域 -->
-    <main class="main-content">
-      <router-view />
-    </main>
+            <div 
+              v-for="module in modules" 
+              :key="module.key"
+              :class="['nav-item', { active: activeModule === module.key }]"
+              @click="navigateTo(module.key)"
+            >
+              <el-icon><component :is="module.icon" /></el-icon>
+              {{ module.name }}
+            </div>
+          </nav>
+
+          <!-- 使用登录按钮组件替换原来的用户区域 -->
+          <LoginButton />
+        </div>
+      </header>
+
+      <!-- 主内容区域 -->
+      <main class="main-content">
+        <router-view v-slot="{ Component }">
+          <transition name="page" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </main>
+      
+      <!-- 全局故障警告组件 -->
+      <GlobalFaultAlert />
+    </template>
     
-    <!-- 全局故障警告组件 -->
-    <GlobalFaultAlert />
+    <!-- 登录页面独立显示 -->
+    <template v-else>
+      <router-view />
+    </template>
   </div>
 </template>
 
@@ -149,9 +161,31 @@ const navigateTo = (moduleKey: string) => {
 .main-content {
   flex: 1;
   padding: 20px;
-  max-width: 1400px;
+  max-width: 2000px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* 页面过渡动画 */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.98);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(1.02);
+}
+
+.page-enter-to,
+.page-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 /* 移动端适配 */
