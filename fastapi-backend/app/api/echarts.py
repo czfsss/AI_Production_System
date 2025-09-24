@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 from datetime import datetime, time
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException
@@ -7,10 +7,12 @@ import logging
 import json
 import time
 from decimal import Decimal
+
 # 修复导入路径
 from api.mysql_query import query_mysql
 from api.equ_monitor_ws import execute_single_query
 from config.mysql_config import shucai, mes
+
 # 导入模型和查询模型
 from schemas.fault_info import *
 from schemas.echarts import *
@@ -20,6 +22,7 @@ from schemas.websocket_connect import ConnectionManager
 from models.models import *
 from config.point_map import point_map, table_map
 from config.point_map import get_all_tablepoint
+from utils.dependencies import get_current_user
 
 
 # 自定义JSON编码器，处理Decimal类型
@@ -40,10 +43,12 @@ async def get_echarts_data(equ_name: str, class_shift: Shift):
     echarts_data = {}
     table_name_dict = await get_all_tablepoint(equ_name)
     table_name = ""
- 
+
     if "卷烟机" in equ_name:
         table_name = table_name_dict["status"].split("_")[0]
-        params, value = await execute_single_query("fault_counts", table_name+"_50011")
+        params, value = await execute_single_query(
+            "fault_counts", table_name + "_50011"
+        )
         echarts_data[params] = value
         logging.info(f"fault_counts:{value}")
     else:
@@ -249,6 +254,8 @@ async def websocket_endpoint(websocket: WebSocket, equ_name: str, class_shift: s
 
 
 @echarts_router.post(f"/echarts")
-async def query_echarts_data(query_params: QueryEchartsData):
+async def query_echarts_data(
+    query_params: QueryEchartsData, current_user: User = Depends(get_current_user)
+):
     data = await get_echarts_data_all(query_params)
     return data

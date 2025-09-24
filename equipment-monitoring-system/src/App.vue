@@ -4,6 +4,8 @@ import { useRouter, useRoute } from 'vue-router'
 // import { Monitor, Tools, Reading, User, Setting } from '@element-plus/icons-vue'
 // 导入登录按钮组件
 import LoginButton from './components/LoginButton.vue'
+// 导入全屏按钮组件
+import FullscreenButton from './components/FullscreenButton.vue'
 // 导入全局故障警告组件
 import GlobalFaultAlert from './components/GlobalFaultAlert.vue'
 
@@ -70,8 +72,13 @@ const navigateTo = (moduleKey: string) => {
             </div>
           </nav>
 
-          <!-- 使用登录按钮组件替换原来的用户区域 -->
-          <LoginButton />
+          <!-- 右侧控制区域 -->
+          <div class="header-controls">
+            <!-- 全屏按钮 -->
+            <FullscreenButton />
+            <!-- 登录按钮 -->
+            <LoginButton />
+          </div>
         </div>
       </header>
 
@@ -186,6 +193,13 @@ const navigateTo = (moduleKey: string) => {
 .page-leave-from {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+/* 头部控制区域样式 */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* 移动端适配 */

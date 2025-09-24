@@ -9,8 +9,6 @@ from datetime import datetime
 user_router = APIRouter()
 
 
-
-
 # 注册
 @user_router.post(
     "/register",
@@ -202,6 +200,64 @@ async def refresh_token(item: RefreshTokenModel):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的刷新令牌"
         )
+
+
+# 修改昵称
+@user_router.post(
+    "/update_nickname",
+    response_model=LoginResponseModel,
+    summary="修改昵称",
+)
+async def update_nickname(
+    item: UpdateNicknameModel, current_user: User = Depends(get_current_active_user)
+):
+    """修改当前用户的昵称"""
+    # 更新昵称
+    current_user.nickname = item.nickname
+    await current_user.save()
+
+    return LoginResponseModel(
+        username=current_user.username,
+        nickname=current_user.nickname,
+        create_time=(
+            current_user.create_time.isoformat() if current_user.create_time else None
+        ),
+    )
+
+
+# 重置密码（通过安全问题）
+@user_router.post(
+    "/reset_password",
+    response_model=LoginResponseModel,
+    summary="重置密码",
+)
+async def reset_password(item: ResetPasswordModel):
+    """通过安全问题重置密码"""
+    # 根据用户名获取用户
+    user = await User.get_or_none(username=item.username)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在！"
+        )
+
+    # 安全问题答案验证在模型中已经完成
+    # 判断新密码是否与当前密码相同
+    if auth_utils.verify_password(item.new_password, user.password):
+        raise HTTPException(status_code=400, detail="新密码不能与当前密码相同！")
+
+    # 对新密码进行哈希处理
+    hashed_password = auth_utils.get_password_hash(item.new_password)
+
+    # 更新密码
+    user.password = hashed_password
+    await user.save()
+
+    return LoginResponseModel(
+        username=user.username,
+        nickname=user.nickname,
+        create_time=(user.create_time.isoformat() if user.create_time else None),
+    )
 
 
 # 退出登录

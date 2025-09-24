@@ -1,6 +1,6 @@
 // ECharts数据HTTP服务
-import axios from 'axios'
-import { API_CONFIG, getApiUrl } from '../config/api'
+import { api } from '../utils/httpClient'
+import { API_CONFIG } from '../config/api'
 
 export interface EChartsPostData {
   fault_counts: Array<{
@@ -38,8 +38,6 @@ export class EChartsHttpService {
         equipmentName = equipmentName.replace('卷烟机', '卷接机')
       }
 
-      const url = getApiUrl(API_CONFIG.endpoints.echarts)
-      
       // 构建请求体，只包含非空参数
       const requestBody: Record<string, string> = {
         equ_name: equipmentName
@@ -56,8 +54,9 @@ export class EChartsHttpService {
         requestBody.class_group = params.class_group
       }
       
-      const response = await axios.post(url, requestBody)
-      return response.data
+      const response = await api.post(API_CONFIG.endpoints.echarts, requestBody)
+      const data = await response.json()
+      return data as EChartsPostData
     } catch (error) {
       console.error('[ECharts HTTP] 获取数据失败:', error)
       throw error

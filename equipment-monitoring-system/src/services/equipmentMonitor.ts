@@ -1,12 +1,5 @@
-import axios from 'axios'
+import { api } from '../utils/httpClient'
 import { API_CONFIG } from '../config/api'
-
-const api = axios.create({
-  baseURL: API_CONFIG.baseURL,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
 
 export interface EquipmentStatusRequest {
   equ_name: string
@@ -40,11 +33,12 @@ export function formatEquipmentName(type: string, number: string | number): stri
  */
 export async function queryEquipmentStatus(equipmentName: string): Promise<EquipmentStatusResponse> {
   try {
-    const response = await api.post<EquipmentStatusResponse>(
+    const response = await api.post(
       API_CONFIG.endpoints.equipmentStatus,
       { equ_name: equipmentName }
     )
-    return response.data
+    const data = await response.json()
+    return data as EquipmentStatusResponse
   } catch (error) {
     console.error('查询设备状态失败:', error)
     throw new Error('查询设备状态失败')

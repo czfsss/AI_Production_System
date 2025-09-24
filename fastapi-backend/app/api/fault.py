@@ -1,16 +1,16 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 from datetime import datetime, time
-from fastapi import APIRouter, HTTPException
 
 # 导入模型和查询模型
 from schemas.fault_info import *
 
 # 导入数据库模型
 from models.models import *
+from utils.dependencies import get_current_user
 
 
-fault_router = APIRouter()
+fault_router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @fault_router.post(

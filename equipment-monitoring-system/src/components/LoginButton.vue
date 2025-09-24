@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { User, ArrowDown, View, Hide, Setting } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { View, Hide } from '@element-plus/icons-vue'
 import { API_CONFIG } from '../config/api'
+import UserProfileDialog from './UserProfileDialog.vue'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 // 控制登录弹窗的显示与隐藏
 const isLoginDialogVisible = ref(false)
@@ -19,9 +23,22 @@ const showConfirmPassword = ref(false)
 
 // 控制忘记密码弹窗的显示与隐藏
 const isForgotPasswordVisible = ref(false)
+// 重置密码表单数据
+const resetPasswordForm = reactive({
+  username: '',
+  securityAnswer: '安全第一、预防为主、综合治理',
+  newPassword: '',
+  confirmPassword: ''
+})
+// 重置密码相关状态
+const isResetingPassword = ref(false)
+const showResetNewPassword = ref(false)
+const showResetConfirmPassword = ref(false)
 
 // 控制退出登录确认弹窗的显示与隐藏
 const isConfirmLogoutVisible = ref(false)
+// 控制用户个人设置弹窗的显示与隐藏
+const isUserProfileVisible = ref(false)
 
 // 打开登录弹窗
 const openLoginDialog = () => {
@@ -48,18 +65,19 @@ const openForgotPassword = () => {
 // 关闭忘记密码弹窗
 const closeForgotPassword = () => {
   isForgotPasswordVisible.value = false
+  // 清空表单
+  resetPasswordForm.username = ''
+  resetPasswordForm.securityAnswer = '安全第一、预防为主、综合治理'
+  resetPasswordForm.newPassword = ''
+  resetPasswordForm.confirmPassword = ''
+  // 重置状态
+  isResetingPassword.value = false
+  showResetNewPassword.value = false
+  showResetConfirmPassword.value = false
   // 恢复背景滚动
   document.body.style.overflow = ''
 }
 
-// 模拟重置密码功能
-const handleResetPassword = (e: Event) => {
-  e.preventDefault()
-  // 这里只是模拟重置密码成功，实际应用中需要调用API
-  isForgotPasswordVisible.value = false
-  // 恢复背景滚动
-  document.body.style.overflow = ''
-}
 
 // 打开退出登录确认弹窗
 const openConfirmLogout = () => {
@@ -75,12 +93,89 @@ const closeConfirmLogout = () => {
   document.body.style.overflow = ''
 }
 
+// 打开个人设置弹窗
+const openUserProfile = () => {
+  isUserProfileVisible.value = true
+}
+
+// 关闭个人设置弹窗
+const closeUserProfile = () => {
+  isUserProfileVisible.value = false
+}
+
+// 处理重置密码
+const handleResetPassword = async (event: Event) => {
+  event.preventDefault()
+  
+  // 验证两次密码输入
+  if (resetPasswordForm.newPassword !== resetPasswordForm.confirmPassword) {
+    ElMessage.error('两次输入的密码不一致')
+    return
+  }
+  
+  // 验证工号格式
+  if (!/^\d{7}$/.test(resetPasswordForm.username)) {
+    ElMessage.error('工号必须为7位数字')
+    return
+  }
+  
+  // 验证密码长度
+  if (resetPasswordForm.newPassword.length < 8) {
+    ElMessage.error('密码长度至少8位')
+    return
+  }
+  
+  try {
+    isResetingPassword.value = true
+    
+    const { userService } = await import('../services/user')
+    await userService.resetPassword({
+      username: resetPasswordForm.username,
+      security_answer: resetPasswordForm.securityAnswer,
+      new_password: resetPasswordForm.newPassword,
+      confirm_password: resetPasswordForm.confirmPassword
+    })
+    
+    ElMessage.success('密码重置成功！请使用新密码登录')
+    closeForgotPassword()
+    openLoginDialog()
+    
+  } catch (error: unknown) {
+    console.error('重置密码失败:', error)
+    const message = (error as Error).message || '重置密码失败'
+    ElMessage.error(message)
+  } finally {
+    isResetingPassword.value = false
+  }
+}
+
+// 处理用户信息更新（密码修改后需要重新登录）
+const handleUserUpdated = () => {
+  // 密码修改成功后，清除登录状态，让用户重新登录
+  setTimeout(() => {
+    authStore.logout()
+    ElMessage.info('请使用新密码重新登录')
+  }, 1000)
+}
+
 // 确认退出登录
-const confirmLogout = () => {
-  authStore.logout()
-  isConfirmLogoutVisible.value = false
-  // 恢复背景滚动
-  document.body.style.overflow = ''
+const confirmLogout = async () => {
+  try {
+    // 调用后端退出登录API（如果用户已登录）
+    if (authStore.isLoggedIn) {
+      const { userService } = await import('../services/user')
+      await userService.logout()
+    }
+  } catch (error) {
+    console.warn('后端退出登录失败，但将继续清除本地状态:', error)
+  } finally {
+    // 无论后端调用是否成功，都清除本地登录状态
+    authStore.logout()
+    isConfirmLogoutVisible.value = false
+    // 恢复背景滚动
+    document.body.style.overflow = ''
+    ElMessage.success('已退出登录')
+  }
 }
 
 // 切换登录/注册模式
@@ -115,7 +210,12 @@ const handleLogin = async (e: Event) => {
       authStore.login(userData)
       isLoginDialogVisible.value = false
       document.body.style.overflow = ''
-      showSuccessNotification()
+      
+      // 显示成功消息并跳转
+      ElMessage.success('登录成功！')
+      
+      // 立即跳转到监控页面
+      router.push('/monitoring')
     } else {
       const errorData = await response.json()
       let errorMessage = '登录失败'
@@ -233,7 +333,7 @@ const handleRegister = async (e: Event) => {
         <el-icon class="cursor-pointer"><Setting /></el-icon>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item>个人设置</el-dropdown-item>
+            <el-dropdown-item @click="openUserProfile">个人设置</el-dropdown-item>
             <el-dropdown-item>系统设置</el-dropdown-item>
             <el-dropdown-item divided @click="openConfirmLogout">退出登录</el-dropdown-item>
           </el-dropdown-menu>
@@ -291,13 +391,69 @@ const handleRegister = async (e: Event) => {
     <div v-if="isForgotPasswordVisible" class="custom-dialog-overlay">
       <div class="container">
         <button class="close-button" @click="closeForgotPassword">×</button>
-        <div class="heading">忘记密码</div>
-        <form action="" class="form" @submit="handleResetPassword">
-          <input required class="input" type="email" name="email" id="forgot-email" placeholder="请输入您的邮箱">
-          <input class="login-button" type="submit" value="发送重置链接">
+        <div class="heading">重置密码</div>
+        <form @submit.prevent="handleResetPassword" class="form">
+          <input 
+            required 
+            class="input" 
+            type="text" 
+            v-model="resetPasswordForm.username"
+            placeholder="请输入工号(7位数字)" 
+            maxlength="7" 
+            pattern="\d{7}"
+          >
+          
+          <div class="security-question">
+            <label class="question-label">安全问题：</label>
+            <p class="question-text">淮阴卷烟厂的安全生产管理方针是什么？</p>
+            <input 
+              required 
+              class="input" 
+              type="text" 
+              v-model="resetPasswordForm.securityAnswer"
+              placeholder="请输入答案"
+            >
+          </div>
+          
+          <div class="password-input-container">
+            <input 
+              required 
+              class="input" 
+              :type="showResetNewPassword ? 'text' : 'password'" 
+              v-model="resetPasswordForm.newPassword"
+              placeholder="新密码(至少8位)"
+              minlength="8"
+            >
+            <button type="button" class="password-toggle" @click="showResetNewPassword = !showResetNewPassword">
+              <span v-if="showResetNewPassword"><Hide size="18" /></span>
+              <span v-else><View size="18" /></span>
+            </button>
+          </div>
+          
+          <div class="password-input-container">
+            <input 
+              required 
+              class="input" 
+              :type="showResetConfirmPassword ? 'text' : 'password'" 
+              v-model="resetPasswordForm.confirmPassword"
+              placeholder="确认新密码"
+            >
+            <button type="button" class="password-toggle" @click="showResetConfirmPassword = !showResetConfirmPassword">
+              <span v-if="showResetConfirmPassword"><Hide size="18" /></span>
+              <span v-else><View size="18" /></span>
+            </button>
+          </div>
+          
+          <button 
+            class="login-button" 
+            type="submit" 
+            :disabled="isResetingPassword"
+          >
+            {{ isResetingPassword ? '重置中...' : '重置密码' }}
+          </button>
         </form>
         <div class="switch-mode">
-          <a href="#" @click.prevent="() => { closeForgotPassword(); isLoginDialogVisible = true; }">返回登录</a>
+          <a href="#" @click.prevent="() => { closeForgotPassword(); openLoginDialog(); }">返回登录</a>
         </div>
       </div>
     </div>
@@ -313,6 +469,13 @@ const handleRegister = async (e: Event) => {
         </div>
       </div>
     </div>
+
+    <!-- 用户个人设置弹窗 -->
+    <UserProfileDialog 
+      :visible="isUserProfileVisible"
+      @close="closeUserProfile"
+      @updated="handleUserUpdated"
+    />
   </div>
 </template>
 
@@ -656,5 +819,30 @@ const handleRegister = async (e: Event) => {
     border-radius: 0.5rem; /* 进一步调整圆角 */
     box-shadow: 0px 0px 30px #1f4c65; /* 进一步减小阴影 */
   }
+}
+
+/* 安全问题样式 */
+.security-question {
+  margin: 15px 0;
+  text-align: left;
+}
+
+.question-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.question-text {
+  font-size: 13px;
+  color: #666;
+  margin: 8px 0 12px 0;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 3px solid #3b82f6;
+  line-height: 1.4;
 }
 </style>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { View, Hide, Monitor, Tools, Reading, User } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { API_CONFIG } from '../config/api'
 
 const router = useRouter()
@@ -28,6 +29,17 @@ const showConfirmPassword = ref(false)
 
 // 控制忘记密码弹窗的显示与隐藏
 const isForgotPasswordVisible = ref(false)
+// 重置密码表单数据
+const resetPasswordForm = reactive({
+  username: '',
+  securityAnswer: '安全第一、预防为主、综合治理',
+  newPassword: '',
+  confirmPassword: ''
+})
+// 重置密码相关状态
+const isResetingPassword = ref(false)
+const showResetNewPassword = ref(false)
+const showResetConfirmPassword = ref(false)
 
 // 系统功能展示数据
 const systemFeatures = [
@@ -79,18 +91,74 @@ const openForgotPassword = () => {
 // 关闭忘记密码弹窗
 const closeForgotPassword = () => {
   isForgotPasswordVisible.value = false
+  // 清空表单
+  resetPasswordForm.username = ''
+  resetPasswordForm.securityAnswer = '安全第一、预防为主、综合治理'
+  resetPasswordForm.newPassword = ''
+  resetPasswordForm.confirmPassword = ''
+  // 重置状态
+  isResetingPassword.value = false
+  showResetNewPassword.value = false
+  showResetConfirmPassword.value = false
   // 恢复背景滚动
   document.body.style.overflow = ''
 }
 
-// 模拟重置密码功能
-const handleResetPassword = (e: Event) => {
+// 处理重置密码
+const handleResetPassword = async (e: Event) => {
   e.preventDefault()
-  // 这里只是模拟重置密码成功，实际应用中需要调用API
-  isForgotPasswordVisible.value = false
-  // 恢复背景滚动
-  document.body.style.overflow = ''
-  showSuccessNotification('重置密码邮件已发送')
+  
+  // 验证两次密码输入
+  if (resetPasswordForm.newPassword !== resetPasswordForm.confirmPassword) {
+    alert('两次输入的密码不一致')
+    return
+  }
+  
+  // 验证工号格式
+  if (!/^\d{7}$/.test(resetPasswordForm.username)) {
+    alert('工号必须为7位数字')
+    return
+  }
+  
+  // 验证密码长度
+  if (resetPasswordForm.newPassword.length < 8) {
+    alert('密码长度至少8位')
+    return
+  }
+  
+  try {
+    isResetingPassword.value = true
+    
+    // 调用重置密码API
+    const response = await fetch(`${API_CONFIG.baseURL}/api/user/reset_password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        username: resetPasswordForm.username,
+        security_answer: resetPasswordForm.securityAnswer,
+        new_password: resetPasswordForm.newPassword,
+        confirm_password: resetPasswordForm.confirmPassword
+      })
+    })
+    
+    if (response.ok) {
+    ElMessage.success('密码重置成功！请使用新密码登录')
+    closeForgotPassword()
+    openLoginDialog()
+    } else {
+      const errorData = await response.json()
+      const message = errorData.detail || '重置密码失败'
+      alert(message)
+    }
+    
+  } catch (error) {
+    console.error('重置密码失败:', error)
+    alert('重置密码失败，请检查网络连接')
+  } finally {
+    isResetingPassword.value = false
+  }
 }
 
 // 切换登录/注册模式
@@ -98,39 +166,10 @@ const toggleMode = () => {
   isLoginMode.value = !isLoginMode.value
 }
 
-// 显示成功通知
-const showSuccessNotification = (message: string = '登录成功！') => {
-  // 移除已存在的通知
-  const existingNotification = document.querySelector('.success-notification')
-  if (existingNotification) {
-    document.body.removeChild(existingNotification)
-  }
-  
-  const notification = document.createElement('div')
-  notification.className = 'success-notification'
-  notification.innerHTML = `
-    <div class="notification-content">
-      <div class="notification-icon">✓</div>
-      <div class="notification-message">${message}</div>
-    </div>
-  `
-  document.body.appendChild(notification)
-  
-  // 2.5秒后自动移除通知
-  setTimeout(() => {
-    if (document.body.contains(notification)) {
-      notification.classList.add('fade-out')
-      setTimeout(() => {
-        if (document.body.contains(notification)) {
-          document.body.removeChild(notification)
-        }
-      }, 500)
-    }
-  }, 2500)
-}
+// 注意：showSuccessNotification 函数已被 ElMessage.success 替代，但保留用于样式支持
 
 // 显示加载状态
-const showLoadingState = (button: HTMLInputElement, _originalText: string) => {
+const showLoadingState = (button: HTMLInputElement) => {
   button.disabled = true
   button.value = '处理中...'
   button.style.cursor = 'not-allowed'
@@ -158,7 +197,7 @@ const handleLogin = async (e: Event) => {
   }
   
   // 显示加载状态
-  showLoadingState(submitButton, '登录')
+  showLoadingState(submitButton)
   
   try {
     // 调用后端登录API
@@ -173,30 +212,18 @@ const handleLogin = async (e: Event) => {
     if (response.ok) {
       const userData = await response.json()
       
-      // 显示登录成功动画
-      showSuccessNotification('登录成功！欢迎回来')
+      // 登录成功，更新用户状态
+      authStore.login(userData)
+      isLoginDialogVisible.value = false
+      document.body.style.overflow = ''
       
-      // 添加弹窗消失动画
-      const dialogElement = document.querySelector('.custom-dialog-overlay') as HTMLElement
-      if (dialogElement) {
-        dialogElement.style.animation = 'overlayFadeOut 0.3s ease-out'
-      }
+      // 显示成功消息并立即跳转
+      ElMessage.success('登录成功！正在进入系统...')
       
-      // 延迟关闭弹窗和跳转，让用户看到成功反馈
+      // 减少延迟，快速跳转
       setTimeout(() => {
-        // 登录成功，更新用户状态
-        authStore.login(userData)
-        isLoginDialogVisible.value = false
-        document.body.style.overflow = ''
-        
-        // 显示跳转提示
-        showSuccessNotification('正在进入系统...')
-        
-        // 再延迟一点跳转，确保状态更新完成
-        setTimeout(() => {
-          router.push('/monitoring')
-        }, 800)
-      }, 500)
+        router.push('/monitoring')
+      }, 300)
     } else {
       const errorData = await response.json()
       let errorMessage = '登录失败'
@@ -241,7 +268,7 @@ const handleRegister = async (e: Event) => {
   }
   
   // 显示加载状态
-  showLoadingState(submitButton, '注册')
+  showLoadingState(submitButton)
   
   try {
     // 调用后端注册API
@@ -256,30 +283,18 @@ const handleRegister = async (e: Event) => {
     if (response.ok) {
       const userData = await response.json()
       
-      // 显示注册成功动画
-      showSuccessNotification('注册成功！欢迎加入')
+      // 注册成功，自动登录
+      authStore.login(userData)
+      isLoginDialogVisible.value = false
+      document.body.style.overflow = ''
       
-      // 添加弹窗消失动画
-      const dialogElement = document.querySelector('.custom-dialog-overlay') as HTMLElement
-      if (dialogElement) {
-        dialogElement.style.animation = 'overlayFadeOut 0.3s ease-out'
-      }
+      // 显示成功消息并快速跳转
+      ElMessage.success('注册成功！正在进入系统...')
       
-      // 延迟关闭弹窗和跳转
+      // 减少延迟，快速跳转
       setTimeout(() => {
-        // 注册成功，自动登录
-        authStore.login(userData)
-        isLoginDialogVisible.value = false
-        document.body.style.overflow = ''
-        
-        // 显示跳转提示
-        showSuccessNotification('正在进入系统...')
-        
-        // 再延迟一点跳转
-        setTimeout(() => {
-          router.push('/monitoring')
-        }, 800)
-      }, 500)
+        router.push('/monitoring')
+      }, 300)
     } else {
       const errorData = await response.json()
       let errorMessage = '注册失败'
@@ -440,10 +455,66 @@ const handleRegister = async (e: Event) => {
     <div v-if="isForgotPasswordVisible" class="custom-dialog-overlay">
       <div class="container">
         <button class="close-button" @click="closeForgotPassword">×</button>
-        <div class="heading">忘记密码</div>
-        <form action="" class="form" @submit="handleResetPassword">
-          <input required class="input" type="email" name="email" id="forgot-email" placeholder="请输入您的邮箱">
-          <input class="login-button" type="submit" value="发送重置链接">
+        <div class="heading">重置密码</div>
+        <form @submit.prevent="handleResetPassword" class="form">
+          <input 
+            required 
+            class="input" 
+            type="text" 
+            v-model="resetPasswordForm.username"
+            placeholder="请输入工号(7位数字)" 
+            maxlength="7" 
+            pattern="\d{7}"
+          >
+          
+          <div class="security-question">
+            <label class="question-label">安全问题：</label>
+            <p class="question-text">淮阴卷烟厂的安全生产管理方针是什么？</p>
+            <input 
+              required 
+              class="input" 
+              type="text" 
+              v-model="resetPasswordForm.securityAnswer"
+              placeholder="请输入答案"
+            >
+          </div>
+          
+          <div class="password-input-container">
+            <input 
+              required 
+              class="input" 
+              :type="showResetNewPassword ? 'text' : 'password'" 
+              v-model="resetPasswordForm.newPassword"
+              placeholder="新密码(至少8位)"
+              minlength="8"
+            >
+            <button type="button" class="password-toggle" @click="showResetNewPassword = !showResetNewPassword">
+              <span v-if="showResetNewPassword"><Hide size="18" /></span>
+              <span v-else><View size="18" /></span>
+            </button>
+          </div>
+          
+          <div class="password-input-container">
+            <input 
+              required 
+              class="input" 
+              :type="showResetConfirmPassword ? 'text' : 'password'" 
+              v-model="resetPasswordForm.confirmPassword"
+              placeholder="确认新密码"
+            >
+            <button type="button" class="password-toggle" @click="showResetConfirmPassword = !showResetConfirmPassword">
+              <span v-if="showResetConfirmPassword"><Hide size="18" /></span>
+              <span v-else><View size="18" /></span>
+            </button>
+          </div>
+          
+          <button 
+            class="login-button" 
+            type="submit" 
+            :disabled="isResetingPassword"
+          >
+            {{ isResetingPassword ? '重置中...' : '重置密码' }}
+          </button>
         </form>
             <div class="switch-mode">
               <a href="#" @click.prevent="() => { closeForgotPassword(); openLoginDialog(); }">返回登录</a>
@@ -1278,5 +1349,30 @@ const handleRegister = async (e: Event) => {
   .stat-label {
     font-size: 12px;
   }
+}
+
+/* 安全问题样式 */
+.security-question {
+  margin: 15px 0;
+  text-align: left;
+}
+
+.question-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.question-text {
+  font-size: 13px;
+  color: #666;
+  margin: 8px 0 12px 0;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 3px solid #4facfe;
+  line-height: 1.4;
 }
 </style>
