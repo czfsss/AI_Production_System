@@ -16,7 +16,7 @@ from config.mysql_config import shucai
 from schemas.equ_bending import QueryEquBending, ResponseEquStatus
 import pymysql
 from config.point_map import get_all_tablepoint, table_map
-from schemas.websocket_connect import ConnectionManager
+from utils.websocket_connect import ConnectionManager
 from models.models import *
 
 # 配置日志

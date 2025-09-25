@@ -9,14 +9,14 @@ import time
 from decimal import Decimal
 
 # 修复导入路径
-from api.mysql_query import query_mysql
+from utils.mysql_query import query_mysql
 from api.equ_monitor_ws import execute_single_query
 from config.mysql_config import shucai, mes
 
 # 导入模型和查询模型
 from schemas.fault_info import *
 from schemas.echarts import *
-from schemas.websocket_connect import ConnectionManager
+from utils.websocket_connect import ConnectionManager
 
 # 导入数据库模型
 from models.models import *
