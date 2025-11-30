@@ -18,8 +18,13 @@
     <div v-if="!isLock">
       <ElDialog v-model="visible" :width="370" :show-close="false" @open="handleDialogOpen">
         <div class="lock-content">
-          <img class="cover" src="@imgs/user/avatar.webp" alt="用户头像" />
-          <div class="username">{{ userInfo.userName }}</div>
+          <img
+            class="cover"
+            :src="userInfo.avatar || defaultAvatar"
+            alt="用户头像"
+            @error="onAvatarError"
+          />
+          <div class="username">{{ userInfo.nickname || userInfo.username }}</div>
           <ElForm ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleLock">
             <ElFormItem prop="password">
               <ElInput
@@ -48,8 +53,13 @@
     <!-- 解锁界面 -->
     <div v-else class="unlock-content">
       <div class="box">
-        <img class="cover" src="@imgs/user/avatar.webp" alt="用户头像" />
-        <div class="username">{{ userInfo.userName }}</div>
+        <img
+          class="cover"
+          :src="userInfo.avatar || defaultAvatar"
+          alt="用户头像"
+          @error="onAvatarError"
+        />
+        <div class="username">{{ userInfo.nickname || userInfo.username }}</div>
         <ElForm
           ref="unlockFormRef"
           :model="unlockForm"
@@ -92,6 +102,7 @@
   import CryptoJS from 'crypto-js'
   import { useUserStore } from '@/store/modules/user'
   import { mittBus } from '@/utils/sys'
+  import defaultAvatar from '@imgs/user/avatar.webp'
 
   // 国际化
   const { t } = useI18n()
@@ -102,7 +113,10 @@
   // Store
   const userStore = useUserStore()
   const { info: userInfo, lockPassword, isLock } = storeToRefs(userStore)
-
+  const onAvatarError = (e: Event) => {
+    const img = e.target as HTMLImageElement
+    if (img && img.src !== defaultAvatar) img.src = defaultAvatar
+  }
   // 响应式数据
   const visible = ref<boolean>(false)
   const lockInputRef = ref<any>(null)

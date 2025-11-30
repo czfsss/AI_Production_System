@@ -1,27 +1,21 @@
 from pydantic import BaseModel, validator, Field
-from typing import Optional
+from typing import Optional, List
 
 
 # 注册模型
 class RegisterModel(BaseModel):
     nickname: str  # 昵称
     username: str = Field(
-        min_length=7, max_length=7, description="工号"
-    )  # 工号 7位数字的字符串
+        min_length=2, max_length=50, description="用户名"
+    )
     password: str  # 密码
     confirm_password: str  # 确认密码
-
-    @validator("username")
-    def username_must_be_numeric(cls, v):
-        if not v.isdigit():
-            raise ValueError("工号必须为7位数字！")
-
-        return v
+    department: str = Field(min_length=1, max_length=50, description="部门")
 
     @validator("password")
     def password_must_be_strong(cls, v):
-        if len(v) < 8:
-            raise ValueError("密码必须至少为8位")
+        if len(v) < 6:
+            raise ValueError("密码必须至少为6位")
         return v
 
     @validator("confirm_password")
@@ -30,12 +24,18 @@ class RegisterModel(BaseModel):
             raise ValueError("两次输入的密码不一致！")
         return v
 
+    @validator("department")
+    def department_must_not_be_empty(cls, v):
+        if not v.strip():
+            raise ValueError("部门不能为空")
+        return v.strip()
+
 
 # 登录模型
 class LoginModel(BaseModel):
     username: str = Field(
-        min_length=7, max_length=7, description="工号"
-    )  # 工号 7位数字的字符串
+        min_length=2, max_length=50, description="用户名"
+    )
     password: str = Field(description="密码")  # 密码
 
 
@@ -47,8 +47,8 @@ class UpdatePasswordModel(BaseModel):
 
     @validator("new_password")
     def new_password_must_be_strong(cls, v):
-        if len(v) < 8:
-            raise ValueError("密码必须至少为8位")
+        if len(v) < 6:
+            raise ValueError("密码必须至少为6位")
         return v
 
     @validator("confirm_password")
@@ -60,14 +60,21 @@ class UpdatePasswordModel(BaseModel):
 
 # 查询模型
 class QueryModel(BaseModel):
-    username: str = Field(description="工号")
+    username: str = Field(description="用户名")
 
 
 # 登录返回用户信息
 class LoginResponseModel(BaseModel):
-    username: str = Field(description="工号")
+    username: str = Field(description="用户名")
     nickname: str = Field(description="昵称")
     create_time: Optional[str] = Field(default=None, description="创建时间")
+    roles: Optional[List[str]] = Field(default=None, description="角色列表")
+    permissions: Optional[List[str]] = Field(default=None, description="权限标识列表")
+    department: Optional[str] = Field(default=None, description="部门")
+    phone: Optional[str] = Field(default=None, description="手机号")
+    gender: Optional[str] = Field(default=None, description="性别")
+    avatar: Optional[str] = Field(default=None, description="头像")
+    status: Optional[int] = Field(default=None, description="状态")
 
 
 # JWT令牌响应模型

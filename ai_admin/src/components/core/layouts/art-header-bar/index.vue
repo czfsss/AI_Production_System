@@ -135,18 +135,16 @@
             trigger="hover"
             :show-arrow="false"
             popper-class="user-menu-popover"
-            popper-style="border: 1px solid var(--art-border-dashed-color); border-radius: calc(var(--custom-radius) / 2 + 4px); padding: 5px 16px; 5px 16px;"
+            popper-style="border: 1px solid var(--art-border-dashed-color); border-radius: calc(var(--custom-radius) / 2 + 4px); padding: 5px 16px;"
           >
             <template #reference>
-              <img class="cover" src="@imgs/user/avatar.webp" alt="avatar" />
+              <span class="cover svg-icon" v-html="userIconRaw"></span>
             </template>
             <template #default>
               <div class="user-menu-box">
                 <div class="user-head">
-                  <img class="cover" src="@imgs/user/avatar.webp" style="float: left" />
                   <div class="user-wrap">
-                    <span class="name">{{ userInfo.userName }}</span>
-                    <span class="email">{{ userInfo.email }}</span>
+                    <span class="name">{{ userInfo.nickname || userInfo.username }}</span>
                   </div>
                 </div>
                 <ul class="user-menu">
@@ -157,10 +155,6 @@
                   <li @click="toDocs()">
                     <i class="menu-icon iconfont-sys" style="font-size: 15px">&#xe828;</i>
                     <span class="menu-txt">{{ $t('topBar.user.docs') }}</span>
-                  </li>
-                  <li @click="toGithub()">
-                    <i class="menu-icon iconfont-sys">&#xe8d6;</i>
-                    <span class="menu-txt">{{ $t('topBar.user.github') }}</span>
                   </li>
                   <li @click="lockScreen()">
                     <i class="menu-icon iconfont-sys">&#xe817;</i>
@@ -199,6 +193,7 @@
   import { themeAnimation } from '@/utils/theme/animation'
   import { useCommon } from '@/composables/useCommon'
   import { useHeaderBar } from '@/composables/useHeaderBar'
+  import userIconRaw from '@/用户.svg?raw'
 
   defineOptions({ name: 'ArtHeaderBar' })
 
@@ -284,14 +279,6 @@
   const toDocs = (): void => {
     window.open(WEB_LINKS.DOCS)
   }
-
-  /**
-   * 打开 GitHub 页面
-   */
-  const toGithub = (): void => {
-    window.open(WEB_LINKS.GITHUB)
-  }
-
   /**
    * 跳转到首页
    */
@@ -414,4 +401,28 @@
 <style lang="scss" scoped>
   @use './style';
   @use './mobile';
+  .user .cover {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .svg-icon svg {
+    width: 80%;
+    height: 80%;
+    display: block;
+  }
+  .svg-icon svg path,
+  .svg-icon svg circle,
+  .svg-icon svg rect,
+  .svg-icon svg polygon {
+    fill: currentColor !important;
+  }
+  :deep(.user-menu-popover) .user-head .cover {
+    width: 40px;
+    height: 40px;
+  }
 </style>

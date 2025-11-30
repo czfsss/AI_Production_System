@@ -48,7 +48,7 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (request: InternalAxiosRequestConfig) => {
     const { accessToken } = useUserStore()
-    if (accessToken) request.headers.set('Authorization', accessToken)
+    if (accessToken) request.headers.set('Authorization', `Bearer ${accessToken}`)
 
     if (request.data && !(request.data instanceof FormData) && !request.headers['Content-Type']) {
       request.headers.set('Content-Type', 'application/json')
@@ -66,10 +66,19 @@ axiosInstance.interceptors.request.use(
 /** 响应拦截器 */
 axiosInstance.interceptors.response.use(
   (response: AxiosResponse<Http.BaseResponse>) => {
-    const { code, msg } = response.data
-    if (code === ApiStatus.success) return response
-    if (code === ApiStatus.unauthorized) handleUnauthorizedError(msg)
-    throw createHttpError(msg || $t('httpMsg.requestFailed'), code)
+    // 后端API可能返回的数据格式与前端期望不同，这里做兼容处理
+    if (response.data) {
+      // 如果有code字段，说明是标准API响应格式
+      if ('code' in response.data) {
+        const { code, msg } = response.data
+        if (code === ApiStatus.success) return response
+        if (code === ApiStatus.unauthorized) handleUnauthorizedError(msg)
+        throw createHttpError(msg || $t('httpMsg.requestFailed'), code)
+      } else {
+        return response
+      }
+    }
+    return response
   },
   (error) => {
     if (error.response?.status === ApiStatus.unauthorized) handleUnauthorizedError()
@@ -159,13 +168,19 @@ async function request<T = any>(config: ExtendedAxiosRequestConfig): Promise<T> 
 
   try {
     const res = await axiosInstance.request<Http.BaseResponse<T>>(config)
+    const payload = res.data as any
 
-    // 显示成功消息
-    if (config.showSuccessMessage && res.data.msg) {
-      showSuccess(res.data.msg)
+    if (payload && typeof payload === 'object' && 'code' in payload && 'data' in payload) {
+      if (config.showSuccessMessage && payload.msg) {
+        showSuccess(payload.msg)
+      }
+      return payload.data as T
     }
 
-    return res.data.data as T
+    if (config.showSuccessMessage && payload?.msg) {
+      showSuccess(payload.msg)
+    }
+    return payload as T
   } catch (error) {
     if (error instanceof HttpError && error.code !== ApiStatus.unauthorized) {
       const showMsg = config.showErrorMessage !== false

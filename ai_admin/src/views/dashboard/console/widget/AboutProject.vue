@@ -14,10 +14,6 @@
           <span>文档</span>
           <i class="iconfont-sys">&#xe703;</i>
         </div>
-        <div class="btn art-custom-card" @click="goPage(WEB_LINKS.GITHUB_HOME)">
-          <span>Github</span>
-          <i class="iconfont-sys">&#xe703;</i>
-        </div>
         <div class="btn art-custom-card" @click="goPage(WEB_LINKS.BLOG)">
           <span>博客</span>
           <i class="iconfont-sys">&#xe703;</i>

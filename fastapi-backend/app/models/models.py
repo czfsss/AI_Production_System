@@ -8,6 +8,11 @@ class User(Model):
     username = fields.CharField(max_length=20, unique=True, description="用户名")
     password = fields.CharField(max_length=100, description="密码")
     nickname = fields.CharField(max_length=20, description="昵称")
+    department = fields.CharField(max_length=50, null=True, description="部门")
+    phone = fields.CharField(max_length=20, null=True, description="手机号")
+    gender = fields.CharField(max_length=10, null=True, description="性别")
+    avatar = fields.CharField(max_length=255, null=True, description="头像")
+    status = fields.IntField(default=1, description="状态: 1正常 2禁用")
     create_time = fields.DatetimeField(auto_now_add=True, description="创建时间")
 
     def __str__(self):  # 定义对象的字符串表示，方便打印和调试
@@ -66,5 +71,65 @@ class MachPointMap(Model):
 
     def __str__(self):
         return self.mach_name
+
+
+class Role(Model):
+    id = fields.IntField(pk=True, auto=True)
+    name = fields.CharField(max_length=50, unique=True)
+    code = fields.CharField(max_length=50, unique=True)
+    description = fields.CharField(max_length=200, null=True)
+    enabled = fields.BooleanField(default=True)
+    create_time = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "role"
+
+
+class Permission(Model):
+    id = fields.IntField(pk=True, auto=True)
+    title = fields.CharField(max_length=50)
+    auth_mark = fields.CharField(max_length=50, unique=True)
+
+    class Meta:
+        table = "permission"
+
+
+class UserRole(Model):
+    id = fields.IntField(pk=True, auto=True)
+    user = fields.ForeignKeyField("models.User", related_name="user_roles")
+    role = fields.ForeignKeyField("models.Role", related_name="role_users")
+
+    class Meta:
+        table = "user_role"
+
+
+class RolePermission(Model):
+    id = fields.IntField(pk=True, auto=True)
+    role = fields.ForeignKeyField("models.Role", related_name="role_permissions")
+    permission = fields.ForeignKeyField("models.Permission", related_name="permission_roles")
+
+    class Meta:
+        table = "role_permission"
+
+
+class Department(Model):
+    id = fields.IntField(pk=True, auto=True)
+    name = fields.CharField(max_length=50, unique=True, description="部门名称")
+    code = fields.CharField(max_length=50, unique=True, null=True, description="部门编码")
+    description = fields.CharField(max_length=200, null=True, description="部门描述")
+    enabled = fields.BooleanField(default=True, description="启用状态")
+    create_time = fields.DatetimeField(auto_now_add=True, description="创建时间")
+
+    class Meta:
+        table = "department"
+
+
+class DepartmentPermission(Model):
+    id = fields.IntField(pk=True, auto=True)
+    department = fields.ForeignKeyField("models.Department", related_name="department_permissions")
+    permission = fields.ForeignKeyField("models.Permission", related_name="permission_departments")
+
+    class Meta:
+        table = "department_permission"
 
 

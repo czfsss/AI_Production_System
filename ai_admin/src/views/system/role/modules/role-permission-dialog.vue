@@ -46,6 +46,7 @@
   import { useMenuStore } from '@/store/modules/menu'
   import { ElMessage } from 'element-plus'
   import { formatMenuTitle } from '@/router/utils/utils'
+  import { fetchRolePermissions, fetchSaveRolePermissions } from '@/api/system-manage'
 
   type RoleListItem = Api.SystemManage.RoleListItem
 
@@ -114,10 +115,18 @@
   // 监听弹窗打开，初始化权限数据
   watch(
     () => props.modelValue,
-    (newVal) => {
+    async (newVal) => {
       if (newVal && props.roleData) {
-        // TODO: 根据角色加载对应的权限数据
-        console.log('设置权限:', props.roleData)
+        try {
+          const res = await fetchRolePermissions({ roleId: props.roleData.roleId })
+          // @ts-ignore
+          if (res && res.authMarks) {
+            // @ts-ignore
+            treeRef.value?.setCheckedKeys(res.authMarks)
+          }
+        } catch (error) {
+          console.error('获取权限失败:', error)
+        }
       }
     }
   )
@@ -127,11 +136,27 @@
     treeRef.value?.setCheckedKeys([])
   }
 
-  const savePermission = () => {
-    // TODO: 调用保存权限接口
-    ElMessage.success('权限保存成功')
-    emit('success')
-    handleClose()
+  const savePermission = async () => {
+    if (!props.roleData) return
+    
+    const tree = treeRef.value
+    if (!tree) return
+
+    const checkedKeys = tree.getCheckedKeys()
+    const halfCheckedKeys = tree.getHalfCheckedKeys()
+    const allKeys = [...checkedKeys, ...halfCheckedKeys]
+
+    try {
+      await fetchSaveRolePermissions({
+        roleId: props.roleData.roleId,
+        authMarks: allKeys
+      })
+      ElMessage.success('权限保存成功')
+      emit('success')
+      handleClose()
+    } catch (error) {
+      console.error('保存权限失败:', error)
+    }
   }
 
   const toggleExpandAll = () => {

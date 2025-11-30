@@ -12,16 +12,21 @@
           <p class="sub-title">{{ $t('register.subTitle') }}</p>
           <ElForm ref="formRef" :model="formData" :rules="rules" label-position="top">
             <ElFormItem prop="username">
-              <ElInput
-                v-model.trim="formData.username"
-                :placeholder="$t('register.placeholder[0]')"
-              />
+              <ElInput v-model.trim="formData.username" placeholder="请输入7位工号" />
+            </ElFormItem>
+
+            <ElFormItem prop="department">
+              <ElInput v-model.trim="formData.department" placeholder="请输入部门" />
+            </ElFormItem>
+
+            <ElFormItem prop="nickname">
+              <ElInput v-model.trim="formData.nickname" placeholder="请输入昵称" />
             </ElFormItem>
 
             <ElFormItem prop="password">
               <ElInput
                 v-model.trim="formData.password"
-                :placeholder="$t('register.placeholder[1]')"
+                placeholder="请输入至少8位密码"
                 type="password"
                 autocomplete="off"
                 show-password
@@ -81,10 +86,14 @@
   import { ElMessage } from 'element-plus'
   import type { FormInstance, FormRules } from 'element-plus'
   import { useI18n } from 'vue-i18n'
+  import { useRouter } from 'vue-router'
+  import { fetchRegister } from '@/api/auth'
+  import { useUserStore } from '@/store/modules/user'
 
   defineOptions({ name: 'Register' })
 
   const { t } = useI18n()
+  const userStore = useUserStore()
 
   const router = useRouter()
   const formRef = ref<FormInstance>()
@@ -94,6 +103,8 @@
 
   const formData = reactive({
     username: '',
+    department: '',
+    nickname: '',
     password: '',
     confirmPassword: '',
     agreement: false
@@ -122,12 +133,20 @@
 
   const rules = reactive<FormRules>({
     username: [
-      { required: true, message: t('register.placeholder[0]'), trigger: 'blur' },
-      { min: 3, max: 20, message: t('register.rule[2]'), trigger: 'blur' }
+      { required: true, message: '请输入工号', trigger: 'blur' },
+      { pattern: /^\d{7}$/, message: '工号必须为7位数字', trigger: 'blur' }
+    ],
+    department: [
+      { required: true, message: '请输入部门', trigger: 'blur' },
+      { min: 1, max: 50, message: '部门长度为1-50个字符', trigger: 'blur' }
+    ],
+    nickname: [
+      { required: true, message: '请输入昵称', trigger: 'blur' },
+      { min: 1, max: 20, message: '昵称长度为1-20个字符', trigger: 'blur' }
     ],
     password: [
       { required: true, validator: validatePass, trigger: 'blur' },
-      { min: 6, message: t('register.rule[3]'), trigger: 'blur' }
+      { min: 8, message: '密码必须至少为8位', trigger: 'blur' }
     ],
     confirmPassword: [{ required: true, validator: validatePass2, trigger: 'blur' }],
     agreement: [
@@ -151,21 +170,32 @@
       await formRef.value.validate()
       loading.value = true
 
-      // 模拟注册请求
-      setTimeout(() => {
-        loading.value = false
-        ElMessage.success('注册成功')
-        toLogin()
-      }, 1000)
-    } catch (error) {
-      console.log('验证失败', error)
-    }
-  }
+      // 注册请求
+      const { access_token, refresh_token, user_info } = await fetchRegister({
+        username: formData.username,
+        password: formData.password,
+        confirm_password: formData.confirmPassword,
+        nickname: formData.nickname,
+        department: formData.department
+      })
 
-  const toLogin = () => {
-    setTimeout(() => {
-      router.push(RoutesAlias.Login)
-    }, 1000)
+      if (!access_token) {
+        throw new Error('注册失败 - 未收到token')
+      }
+
+      // 存储token和用户信息
+      userStore.setToken(access_token, refresh_token)
+      userStore.setUserInfo(user_info)
+      userStore.setLoginStatus(true)
+
+      ElMessage.success('注册成功')
+      router.push('/')
+    } catch (error) {
+      console.log('注册失败', error)
+      ElMessage.error('注册失败，请检查输入信息')
+    } finally {
+      loading.value = false
+    }
   }
 </script>
 

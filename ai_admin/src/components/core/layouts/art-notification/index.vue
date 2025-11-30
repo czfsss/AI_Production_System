@@ -52,7 +52,7 @@
         <ul class="user-list" v-show="barActiveIndex === 1">
           <li v-for="(item, index) in msgList" :key="index">
             <div class="avatar">
-              <img :src="item.avatar" />
+              <img :src="userAvatar" @error="onAvatarError" />
             </div>
             <div class="text">
               <h4>{{ item.title }}</h4>
@@ -91,6 +91,8 @@
   import { computed, ref, watch, type Ref, type ComputedRef } from 'vue'
   import { useI18n } from 'vue-i18n'
   import AppConfig from '@/config'
+  import { useUserStore } from '@/store/modules/user'
+  import defaultAvatar from '@imgs/user/avatar.webp'
 
   // 导入头像图片
   import avatar1 from '@/assets/img/avatar/avatar1.webp'
@@ -146,6 +148,13 @@
   type NoticeType = 'email' | 'message' | 'collection' | 'user' | 'notice'
 
   const { t } = useI18n()
+  const userStore = useUserStore()
+  const { getUserInfo } = storeToRefs(userStore)
+  const userAvatar = computed(() => getUserInfo.value.avatar || defaultAvatar)
+  const onAvatarError = (e: Event) => {
+    const img = e.target as HTMLImageElement
+    if (img && img.src !== defaultAvatar) img.src = defaultAvatar
+  }
 
   const props = defineProps<{
     value: boolean

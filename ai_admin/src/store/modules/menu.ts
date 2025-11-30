@@ -24,7 +24,8 @@ export const useMenuStore = defineStore('menuStore', () => {
    */
   const setMenuList = (list: AppRouteRecord[]) => {
     menuList.value = list
-    setHomePath(homePath.value || getFirstMenuPath(list))
+    const firstPath = getFirstMenuPath(list) || HOME_PAGE_PATH
+    setHomePath(firstPath)
   }
 
   /**

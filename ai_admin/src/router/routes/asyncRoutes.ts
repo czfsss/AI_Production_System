@@ -102,6 +102,17 @@ export const asyncRoutes: AppRouteRecord[] = [
           ]
         }
       }
+      ,
+      {
+        path: 'department',
+        name: 'Department',
+        component: RoutesAlias.Department,
+        meta: {
+          title: '部门管理',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
+      }
     ]
   },
   {

@@ -1,12 +1,72 @@
 from fastapi import APIRouter, Request, HTTPException, Depends, status
+from fastapi import Body
 from schemas.user import *
 from models.models import *
 from utils.auth_utils import auth_utils
 from utils.dependencies import get_current_active_user
 from datetime import datetime
+import os
+import time
 
 
 user_router = APIRouter()
+
+async def ensure_defaults():
+    if not await Role.filter(code="R_SUPER").exists():
+        await Role.create(name="Super Admin", code="R_SUPER")
+    if not await Role.filter(code="R_ADMIN").exists():
+        await Role.create(name="Admin", code="R_ADMIN")
+    if not await Role.filter(code="R_USER").exists():
+        await Role.create(name="User", code="R_USER")
+    marks = [("新增", "add"), ("编辑", "edit"), ("删除", "delete"), ("菜单查看", "menu:view"), ("用户编辑", "user:edit")]
+    for title, mark in marks:
+        if not await Permission.filter(auth_mark=mark).exists():
+            await Permission.create(title=title, auth_mark=mark)
+    for code in ["R_SUPER", "R_ADMIN"]:
+        role = await Role.get(code=code)
+        for mark in ["add", "edit", "delete", "menu:view", "user:edit"]:
+            perm = await Permission.get(auth_mark=mark)
+            if not await RolePermission.filter(role=role, permission=perm).exists():
+                await RolePermission.create(role=role, permission=perm)
+    role = await Role.get(code="R_USER")
+    perm = await Permission.get(auth_mark="menu:view")
+    if not await RolePermission.filter(role=role, permission=perm).exists():
+        await RolePermission.create(role=role, permission=perm)
+
+async def get_user_rbac(username: str):
+    await ensure_defaults()
+    user = await User.get(username=username)
+    uroles = await UserRole.filter(user=user).prefetch_related("role")
+    role_codes = [ur.role.code for ur in uroles]
+    if not role_codes:
+        if username == "admin":
+            role = await Role.get(code="R_SUPER")
+        elif str(username).startswith("1"):
+            role = await Role.get(code="R_SUPER")
+        elif str(username).startswith("2"):
+            role = await Role.get(code="R_ADMIN")
+        else:
+            role = await Role.get(code="R_USER")
+        await UserRole.create(user=user, role=role)
+        role_codes = [role.code]
+    # ensure admin always has super role
+    if username == "admin" and "R_SUPER" not in role_codes:
+        super_role = await Role.get(code="R_SUPER")
+        if not await UserRole.filter(user=user, role=super_role).exists():
+            await UserRole.create(user=user, role=super_role)
+        role_codes.append("R_SUPER")
+    perm_ids = await RolePermission.filter(role__code__in=role_codes).values_list("permission_id", flat=True)
+    perms = await Permission.filter(id__in=list(perm_ids))
+    role_marks = [p.auth_mark for p in perms]
+    dep_marks = []
+    if user.department:
+        dep = await Department.get_or_none(name=user.department)
+        if dep:
+            dperm_ids = await DepartmentPermission.filter(department=dep).values_list("permission_id", flat=True)
+            dperms = await Permission.filter(id__in=list(dperm_ids))
+            dep_marks = [p.auth_mark for p in dperms]
+    marks = list(set(role_marks) | set(dep_marks))
+    return role_codes, marks
 
 
 # 注册
@@ -28,18 +88,31 @@ async def register(item: RegisterModel):
 
     # 进行注册
     user = User(
-        username=item.username, password=hashed_password, nickname=item.nickname
+        username=item.username,
+        password=hashed_password,
+        nickname=item.nickname,
+        department=item.department,
     )
     await user.save()
 
+    await ensure_defaults()
+    await UserRole.create(user=user, role=await Role.get(code="R_USER"))
     # 创建JWT令牌
     tokens = auth_utils.create_token_pair(user.username)
 
     # 返回用户信息和令牌
+    role_codes, marks = await get_user_rbac(user.username)
     user_info = LoginResponseModel(
         username=user.username,
         nickname=user.nickname,
         create_time=user.create_time.isoformat() if user.create_time else None,
+        roles=role_codes,
+        permissions=marks,
+        department=user.department,
+        phone=user.phone,
+        gender=user.gender,
+        avatar=user.avatar,
+        status=user.status,
     )
 
     return TokenResponseModel(
@@ -74,10 +147,18 @@ async def login(item: LoginModel):
     tokens = auth_utils.create_token_pair(user.username)
 
     # 返回用户信息和令牌
+    role_codes, marks = await get_user_rbac(user.username)
     user_info = LoginResponseModel(
         username=user.username,
         nickname=user.nickname,
         create_time=user.create_time.isoformat() if user.create_time else None,
+        roles=role_codes,
+        permissions=marks,
+        department=user.department,
+        phone=user.phone,
+        gender=user.gender,
+        avatar=user.avatar,
+        status=user.status,
     )
 
     return TokenResponseModel(
@@ -93,12 +174,20 @@ async def login(item: LoginModel):
 )
 async def get_user_profile(current_user: User = Depends(get_current_active_user)):
     """获取当前登录用户的信息"""
+    role_codes, marks = await get_user_rbac(current_user.username)
     return LoginResponseModel(
         username=current_user.username,
         nickname=current_user.nickname,
         create_time=(
             current_user.create_time.isoformat() if current_user.create_time else None
         ),
+        roles=role_codes,
+        permissions=marks,
+        department=current_user.department,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        avatar=current_user.avatar,
+        status=current_user.status,
     )
 
 
@@ -143,6 +232,11 @@ async def update_password(
         create_time=(
             current_user.create_time.isoformat() if current_user.create_time else None
         ),
+        department=current_user.department,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        avatar=current_user.avatar,
+        status=current_user.status,
     )
 
 
@@ -181,10 +275,18 @@ async def refresh_token(item: RefreshTokenModel):
         tokens = auth_utils.create_token_pair(username)
 
         # 返回用户信息和新令牌
+        role_codes, marks = await get_user_rbac(user.username)
         user_info = LoginResponseModel(
             username=user.username,
             nickname=user.nickname,
             create_time=user.create_time.isoformat() if user.create_time else None,
+            roles=role_codes,
+            permissions=marks,
+            department=user.department,
+            phone=user.phone,
+            gender=user.gender,
+            avatar=user.avatar,
+            status=user.status,
         )
 
         return TokenResponseModel(
@@ -216,13 +318,58 @@ async def update_nickname(
     current_user.nickname = item.nickname
     await current_user.save()
 
+    role_codes, marks = await get_user_rbac(current_user.username)
     return LoginResponseModel(
         username=current_user.username,
         nickname=current_user.nickname,
         create_time=(
             current_user.create_time.isoformat() if current_user.create_time else None
         ),
+        roles=role_codes,
+        permissions=marks,
+        department=current_user.department,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        avatar=current_user.avatar,
+        status=current_user.status,
     )
+
+@user_router.post("/update_profile", response_model=LoginResponseModel, summary="更新资料")
+async def update_profile(
+    phone: Optional[str] = Body(None),
+    gender: Optional[str] = Body(None),
+    department: Optional[str] = Body(None),
+    current_user: User = Depends(get_current_active_user),
+):
+    changed = False
+    if phone is not None:
+        current_user.phone = phone
+        changed = True
+    if gender is not None:
+        current_user.gender = gender
+        changed = True
+    if department is not None:
+        current_user.department = department
+        changed = True
+    if changed:
+        await current_user.save()
+    role_codes, marks = await get_user_rbac(current_user.username)
+    return LoginResponseModel(
+        username=current_user.username,
+        nickname=current_user.nickname,
+        create_time=(
+            current_user.create_time.isoformat() if current_user.create_time else None
+        ),
+        roles=role_codes,
+        permissions=marks,
+        department=current_user.department,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        avatar=current_user.avatar,
+        status=current_user.status,
+    )
+
+ 
 
 
 # 重置密码（通过安全问题）
@@ -253,10 +400,18 @@ async def reset_password(item: ResetPasswordModel):
     user.password = hashed_password
     await user.save()
 
+    role_codes, marks = await get_user_rbac(user.username)
     return LoginResponseModel(
         username=user.username,
         nickname=user.nickname,
         create_time=(user.create_time.isoformat() if user.create_time else None),
+        roles=role_codes,
+        permissions=marks,
+        department=user.department,
+        phone=user.phone,
+        gender=user.gender,
+        avatar=user.avatar,
+        status=user.status,
     )
 
 

@@ -1,52 +1,7 @@
 <template>
   <div class="page-content user">
     <div class="content">
-      <div class="left-wrap">
-        <div class="user-wrap box-style">
-          <img class="bg" src="@imgs/user/bg.webp" />
-          <img class="avatar" src="@imgs/user/avatar.webp" />
-          <h2 class="name">{{ userInfo.userName }}</h2>
-          <p class="des">AI辅助生产平台 是一个智能化的生产管理系统.</p>
-
-          <div class="outer-info">
-            <div>
-              <i class="iconfont-sys">&#xe72e;</i>
-              <span>jdkjjfnndf@mall.com</span>
-            </div>
-            <div>
-              <i class="iconfont-sys">&#xe608;</i>
-              <span>交互专家</span>
-            </div>
-            <div>
-              <i class="iconfont-sys">&#xe736;</i>
-              <span>广东省深圳市</span>
-            </div>
-            <div>
-              <i class="iconfont-sys">&#xe811;</i>
-              <span>字节跳动－某某平台部－UED</span>
-            </div>
-          </div>
-
-          <div class="lables">
-            <h3>标签</h3>
-            <div>
-              <div v-for="item in lableList" :key="item">
-                {{ item }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- <el-carousel class="gallery" height="160px"
-          :interval="5000"
-          indicator-position="none"
-        >
-          <el-carousel-item class="item" v-for="item in galleryList" :key="item">
-            <img :src="item"/>
-          </el-carousel-item>
-        </el-carousel> -->
-      </div>
-      <div class="right-wrap">
+      <div class="right-wrap two-col">
         <div class="info box-style">
           <h1 class="title">基本设置</h1>
 
@@ -60,7 +15,7 @@
           >
             <ElRow>
               <ElFormItem label="姓名" prop="realName">
-                <el-input v-model="form.realName" :disabled="!isEdit" />
+                <ElInput v-model="form.realName" :disabled="!isEdit" />
               </ElFormItem>
               <ElFormItem label="性别" prop="sex" class="right-input">
                 <ElSelect v-model="form.sex" placeholder="Select" :disabled="!isEdit">
@@ -78,24 +33,21 @@
               <ElFormItem label="昵称" prop="nikeName">
                 <ElInput v-model="form.nikeName" :disabled="!isEdit" />
               </ElFormItem>
-              <ElFormItem label="邮箱" prop="email" class="right-input">
-                <ElInput v-model="form.email" :disabled="!isEdit" />
-              </ElFormItem>
             </ElRow>
 
             <ElRow>
               <ElFormItem label="手机" prop="mobile">
                 <ElInput v-model="form.mobile" :disabled="!isEdit" />
               </ElFormItem>
-              <ElFormItem label="地址" prop="address" class="right-input">
-                <ElInput v-model="form.address" :disabled="!isEdit" />
-              </ElFormItem>
             </ElRow>
 
-            <ElFormItem label="个人介绍" prop="des" :style="{ height: '130px' }">
-              <ElInput type="textarea" :rows="4" v-model="form.des" :disabled="!isEdit" />
-            </ElFormItem>
-
+            <ElRow>
+              <ElFormItem label="部门" prop="department">
+                <ElSelect v-model="form.department" placeholder="请选择部门" :disabled="!isEdit">
+                  <ElOption label="生产制造处" value="生产制造处" />
+                </ElSelect>
+              </ElFormItem>
+            </ElRow>
             <div class="el-form-item-right">
               <ElButton type="primary" style="width: 90px" v-ripple @click="edit">
                 {{ isEdit ? '保存' : '编辑' }}
@@ -104,7 +56,7 @@
           </ElForm>
         </div>
 
-        <div class="info box-style" style="margin-top: 20px">
+        <div class="info box-style">
           <h1 class="title">更改密码</h1>
 
           <ElForm :model="pwdForm" class="form" label-width="86px" label-position="top">
@@ -149,30 +101,31 @@
 
 <script setup lang="ts">
   import { useUserStore } from '@/store/modules/user'
-  import { ElForm, FormInstance, FormRules } from 'element-plus'
+  import { ElForm, FormInstance, FormRules, ElMessage } from 'element-plus'
+  import {
+    fetchGetUserInfo,
+    fetchUpdateNickname,
+    fetchUpdatePassword,
+    fetchUpdateProfile
+  } from '@/api/auth'
 
   defineOptions({ name: 'UserCenter' })
 
   const userStore = useUserStore()
-  const userInfo = computed(() => userStore.getUserInfo)
-
   const isEdit = ref(false)
   const isEditPwd = ref(false)
-  const date = ref('')
   const form = reactive({
-    realName: 'John Snow',
-    nikeName: '皮卡丘',
-    email: '59301283@mall.com',
-    mobile: '18888888888',
-    address: '广东省深圳市宝安区西乡街道101栋201',
+    realName: '',
+    nikeName: '',
+    mobile: '',
     sex: '2',
-    des: 'AI辅助生产平台 是一个智能化的生产管理系统.'
+    department: ''
   })
 
   const pwdForm = reactive({
-    password: '123456',
-    newPassword: '123456',
-    confirmPassword: '123456'
+    password: '',
+    newPassword: '',
+    confirmPassword: ''
   })
 
   const ruleFormRef = ref<FormInstance>()
@@ -186,10 +139,9 @@
       { required: true, message: '请输入昵称', trigger: 'blur' },
       { min: 2, max: 50, message: '长度在 2 到 30 个字符', trigger: 'blur' }
     ],
-    email: [{ required: true, message: '请输入昵称', trigger: 'blur' }],
     mobile: [{ required: true, message: '请输入手机号码', trigger: 'blur' }],
-    address: [{ required: true, message: '请输入地址', trigger: 'blur' }],
-    sex: [{ type: 'array', required: true, message: '请选择性别', trigger: 'blur' }]
+    sex: [{ type: 'array', required: true, message: '请选择性别', trigger: 'blur' }],
+    department: [{ required: false, message: '请选择部门', trigger: 'blur' }]
   })
 
   const options = [
@@ -203,40 +155,59 @@
     }
   ]
 
-  const lableList: Array<string> = ['专注设计', '很有想法', '辣~', '大长腿', '川妹子', '海纳百川']
-
-  onMounted(() => {
-    getDate()
+  onMounted(async () => {
+    try {
+      const data = await fetchGetUserInfo()
+      userStore.setUserInfo(data)
+      form.realName = data.nickname || ''
+      form.nikeName = data.nickname || ''
+      form.mobile = data.phone || ''
+      form.sex = data.gender === '男' ? '1' : '2'
+      form.department = data.department || ''
+    } catch {
+      void 0
+    }
   })
 
-  const getDate = () => {
-    const d = new Date()
-    const h = d.getHours()
-    let text = ''
-
-    if (h >= 6 && h < 9) {
-      text = '早上好'
-    } else if (h >= 9 && h < 11) {
-      text = '上午好'
-    } else if (h >= 11 && h < 13) {
-      text = '中午好'
-    } else if (h >= 13 && h < 18) {
-      text = '下午好'
-    } else if (h >= 18 && h < 24) {
-      text = '晚上好'
-    } else if (h >= 0 && h < 6) {
-      text = '很晚了，早点睡'
+  const edit = async () => {
+    if (!isEdit.value) {
+      isEdit.value = true
+      return
     }
-
-    date.value = text
+    try {
+      await fetchUpdateNickname({ nickname: form.nikeName })
+      const resProfile = await fetchUpdateProfile({
+        phone: form.mobile,
+        gender: form.sex === '1' ? '男' : '女',
+        department: form.department || undefined
+      })
+      userStore.setUserInfo(resProfile)
+      ElMessage.success('资料已更新')
+      isEdit.value = false
+    } catch {
+      ElMessage.error('资料更新失败')
+    }
   }
 
-  const edit = () => {
-    isEdit.value = !isEdit.value
-  }
-
-  const editPwd = () => {
-    isEditPwd.value = !isEditPwd.value
+  const editPwd = async () => {
+    if (!isEditPwd.value) {
+      isEditPwd.value = true
+      return
+    }
+    try {
+      await fetchUpdatePassword({
+        old_password: pwdForm.password || undefined,
+        new_password: pwdForm.newPassword,
+        confirm_password: pwdForm.confirmPassword
+      })
+      ElMessage.success('密码已更新')
+      isEditPwd.value = false
+      pwdForm.password = ''
+      pwdForm.newPassword = ''
+      pwdForm.confirmPassword = ''
+    } catch {
+      ElMessage.error('密码更新失败')
+    }
   }
 </script>
 
@@ -270,117 +241,17 @@
     .content {
       position: relative;
       display: flex;
-      justify-content: space-between;
       margin-top: 10px;
 
-      .left-wrap {
-        width: 450px;
-        margin-right: 25px;
-
-        .user-wrap {
-          position: relative;
-          height: 600px;
-          padding: 35px 40px;
-          overflow: hidden;
-          text-align: center;
-          background: var(--art-main-bg-color);
-          border-radius: $box-radius;
-
-          .bg {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 200px;
-            object-fit: cover;
-          }
-
-          .avatar {
-            position: relative;
-            z-index: 10;
-            width: 80px;
-            height: 80px;
-            margin-top: 120px;
-            object-fit: cover;
-            border: 2px solid #fff;
-            border-radius: 50%;
-          }
-
-          .name {
-            margin-top: 20px;
-            font-size: 22px;
-            font-weight: 400;
-          }
-
-          .des {
-            margin-top: 20px;
-            font-size: 14px;
-          }
-
-          .outer-info {
-            width: 300px;
-            margin: auto;
-            margin-top: 30px;
-            text-align: left;
-
-            > div {
-              margin-top: 10px;
-
-              span {
-                margin-left: 8px;
-                font-size: 14px;
-              }
-            }
-          }
-
-          .lables {
-            margin-top: 40px;
-
-            h3 {
-              font-size: 15px;
-              font-weight: 500;
-            }
-
-            > div {
-              display: flex;
-              flex-wrap: wrap;
-              justify-content: center;
-              margin-top: 15px;
-
-              > div {
-                padding: 3px 6px;
-                margin: 0 10px 10px 0;
-                font-size: 12px;
-                background: var(--art-main-bg-color);
-                border: 1px solid var(--art-border-color);
-                border-radius: 2px;
-              }
-            }
-          }
-        }
-
-        .gallery {
-          margin-top: 25px;
-          border-radius: 10px;
-
-          .item {
-            img {
-              width: 100%;
-              height: 100%;
-              object-fit: cover;
-            }
-          }
-        }
-      }
-
       .right-wrap {
-        flex: 1;
-        overflow: hidden;
-        border-radius: $box-radius;
+        width: 100%;
+        display: flex;
+        gap: 20px;
 
         .info {
           background: var(--art-main-bg-color);
           border-radius: $box-radius;
+          width: calc(50% - 10px);
 
           .title {
             padding: 15px 25px;
@@ -430,13 +301,15 @@
         display: block;
         margin-top: 5px;
 
-        .left-wrap {
-          width: 100%;
-        }
-
         .right-wrap {
           width: 100%;
           margin-top: 15px;
+          display: block;
+
+          .info {
+            width: 100% !important;
+            margin-bottom: 15px;
+          }
         }
       }
     }

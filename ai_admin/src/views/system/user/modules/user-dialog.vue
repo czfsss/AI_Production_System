@@ -9,6 +9,9 @@
       <ElFormItem label="用户名" prop="username">
         <ElInput v-model="formData.username" />
       </ElFormItem>
+      <ElFormItem label="密码" prop="password" v-if="dialogType === 'add'">
+        <ElInput v-model="formData.password" type="password" show-password />
+      </ElFormItem>
       <ElFormItem label="手机号" prop="phone">
         <ElInput v-model="formData.phone" />
       </ElFormItem>
@@ -22,8 +25,8 @@
         <ElSelect v-model="formData.role" multiple>
           <ElOption
             v-for="role in roleList"
-            :key="role.roleCode"
-            :value="role.roleCode"
+            :key="role.roleId"
+            :value="role.roleId"
             :label="role.roleName"
           />
         </ElSelect>
@@ -39,9 +42,9 @@
 </template>
 
 <script setup lang="ts">
-  import { ROLE_LIST_DATA } from '@/mock/temp/formData'
   import type { FormInstance, FormRules } from 'element-plus'
   import { ElMessage } from 'element-plus'
+  import { fetchGetRoleList, fetchAddUser, fetchUpdateUser } from '@/api/system-manage'
 
   interface Props {
     visible: boolean
@@ -58,7 +61,14 @@
   const emit = defineEmits<Emits>()
 
   // 角色列表数据
-  const roleList = ref(ROLE_LIST_DATA)
+  const roleList = ref<Api.SystemManage.RoleListItem[]>([])
+
+  onMounted(async () => {
+    const res = await fetchGetRoleList({ current: 1, size: 100 })
+    if (res && res.records) {
+      roleList.value = res.records
+    }
+  })
 
   // 对话框显示控制
   const dialogVisible = computed({
@@ -74,9 +84,10 @@
   // 表单数据
   const formData = reactive({
     username: '',
+    password: '',
     phone: '',
     gender: '男',
-    role: [] as string[]
+    role: [] as number[]
   })
 
   // 表单验证规则
@@ -84,6 +95,10 @@
     username: [
       { required: true, message: '请输入用户名', trigger: 'blur' },
       { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+    ],
+    password: [
+      { required: true, message: '请输入密码', trigger: 'blur' },
+      { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
     ],
     phone: [
       { required: true, message: '请输入手机号', trigger: 'blur' },
@@ -98,11 +113,33 @@
     const isEdit = props.type === 'edit' && props.userData
     const row = props.userData
 
+    // Map role names to ids if editing?
+    // The backend returns roleNames list. But we need roleIds for editing.
+    // This is a problem. UserList API returns roleNames.
+    // I should change UserList API to return roleIds as well, or mapping is hard.
+    // For now, if we don't have roleIds, we might lose the selection in Edit mode.
+    // Let's assume userRoles contains roleIds if I change backend? 
+    // Or I fetch user detail.
+    // But for now, let's just clear roles or try to map by name if names are unique.
+    
+    // Wait, userRoles in UserListItem (from backend) is string[] (names).
+    // I need IDs.
+    // I will update backend to return roleIds in user list or add user detail API.
+    // Or I can map names to IDs using roleList.
+    
+    let currentRoleIds: number[] = []
+     if (isEdit && row.userRoles) {
+         currentRoleIds = roleList.value
+             .filter(r => row.userRoles.includes(r.roleName))
+             .map(r => r.roleId)
+     }
+
     Object.assign(formData, {
       username: isEdit ? row.userName || '' : '',
+      password: '',
       phone: isEdit ? row.userPhone || '' : '',
       gender: isEdit ? row.userGender || '男' : '男',
-      role: isEdit ? (Array.isArray(row.userRoles) ? row.userRoles : []) : []
+      role: currentRoleIds
     })
   }
 
@@ -111,7 +148,16 @@
     () => [props.visible, props.type, props.userData],
     ([visible]) => {
       if (visible) {
-        initFormData()
+        // Ensure role list is loaded
+        if (roleList.value.length === 0) {
+             fetchGetRoleList({ current: 1, size: 100 }).then(res => {
+                 if (res && res.records) roleList.value = res.records
+                 initFormData()
+             })
+        } else {
+            initFormData()
+        }
+        
         nextTick(() => {
           formRef.value?.clearValidate()
         })
@@ -124,11 +170,34 @@
   const handleSubmit = async () => {
     if (!formRef.value) return
 
-    await formRef.value.validate((valid) => {
+    await formRef.value.validate(async (valid) => {
       if (valid) {
-        ElMessage.success(dialogType.value === 'add' ? '添加成功' : '更新成功')
-        dialogVisible.value = false
-        emit('submit')
+        try {
+            if (dialogType.value === 'add') {
+                await fetchAddUser({
+                    username: formData.username,
+                    password: formData.password,
+                    nickname: formData.username,
+                    phone: formData.phone,
+                    gender: formData.gender,
+                    roleIds: formData.role
+                })
+                ElMessage.success('添加成功')
+            } else {
+                await fetchUpdateUser({
+                    userId: props.userData.id,
+                    username: formData.username,
+                    phone: formData.phone,
+                    gender: formData.gender,
+                    roleIds: formData.role
+                })
+                ElMessage.success('更新成功')
+            }
+            dialogVisible.value = false
+            emit('submit')
+        } catch(e) {
+            console.error(e)
+        }
       }
     })
   }

@@ -60,11 +60,11 @@
               </ElSelect>
             </ElFormItem>
             <ElFormItem prop="username">
-              <ElInput :placeholder="$t('login.placeholder[0]')" v-model.trim="formData.username" />
+              <ElInput placeholder="请输入用户名" v-model.trim="formData.username" />
             </ElFormItem>
             <ElFormItem prop="password">
               <ElInput
-                :placeholder="$t('login.placeholder[1]')"
+                placeholder="请输入密码"
                 v-model.trim="formData.password"
                 type="password"
                 radius="8px"
@@ -156,21 +156,21 @@
     {
       key: 'super',
       label: t('login.roles.super'),
-      userName: 'Super',
-      password: '123456',
+      userName: 'admin',
+      password: '123456', // 对应reset_users.py中的密码
       roles: ['R_SUPER']
     },
     {
       key: 'admin',
       label: t('login.roles.admin'),
-      userName: 'Admin',
+      userName: 'admin', // 目前只重置了一个admin用户，暂时都用admin
       password: '123456',
       roles: ['R_ADMIN']
     },
     {
       key: 'user',
       label: t('login.roles.user'),
-      userName: 'User',
+      userName: 'admin', // 目前只重置了一个admin用户，暂时都用admin
       password: '123456',
       roles: ['R_USER']
     }
@@ -198,8 +198,14 @@
   })
 
   const rules = computed<FormRules>(() => ({
-    username: [{ required: true, message: t('login.placeholder[0]'), trigger: 'blur' }],
-    password: [{ required: true, message: t('login.placeholder[1]'), trigger: 'blur' }]
+    username: [
+      { required: true, message: '请输入用户名', trigger: 'blur' },
+      { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+    ],
+    password: [
+      { required: true, message: t('login.placeholder[1]'), trigger: 'blur' },
+      { min: 6, message: '密码必须至少为6位', trigger: 'blur' }
+    ]
   }))
 
   const loading = ref(false)
@@ -236,20 +242,19 @@
       // 登录请求
       const { username, password } = formData
 
-      const { token, refreshToken } = await fetchLogin({
-        userName: username,
+      const { access_token, refresh_token, user_info } = await fetchLogin({
+        username,
         password
       })
 
       // 验证token
-      if (!token) {
+      if (!access_token) {
         throw new Error('Login failed - no token received')
       }
 
       // 存储token和用户信息
-      userStore.setToken(token, refreshToken)
-      const userInfo = await fetchGetUserInfo()
-      userStore.setUserInfo(userInfo)
+      userStore.setToken(access_token, refresh_token)
+      userStore.setUserInfo(user_info)
       userStore.setLoginStatus(true)
 
       // 登录成功处理

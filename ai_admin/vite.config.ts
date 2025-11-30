@@ -27,8 +27,11 @@ export default ({ mode }: { mode: string }) => {
       proxy: {
         '/api': {
           target: VITE_API_PROXY_URL,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, '')
+          changeOrigin: true
+        },
+        '/static': {
+          target: VITE_API_PROXY_URL,
+          changeOrigin: true
         }
       },
       host: true

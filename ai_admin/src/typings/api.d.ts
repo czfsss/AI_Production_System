@@ -49,12 +49,21 @@ declare namespace Api {
 
     /** 用户信息 */
     interface UserInfo {
-      buttons: string[]
-      roles: string[]
-      userId: number
-      userName: string
-      email: string
+      username?: string
+      nickname?: string
+      create_time?: string | null
+      roles?: string[]
+      permissions?: string[]
+      phone?: string
+      gender?: string
       avatar?: string
+      status?: number
+      department?: string
+      buttons?: string[]
+      userId?: number
+      userName?: string
+      email?: string
+      employeeId?: string
     }
   }
 

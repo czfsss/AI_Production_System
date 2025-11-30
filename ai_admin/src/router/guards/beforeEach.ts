@@ -208,12 +208,13 @@ async function processFrontendMenu(router: Router): Promise<void> {
   const menuList = asyncRoutes.map((route) => menuDataToRouter(route))
   const userStore = useUserStore()
   const roles = userStore.info.roles
+  const department = userStore.info.department
 
   if (!roles) {
     throw new Error('获取用户角色失败')
   }
 
-  const filteredMenuList = filterMenuByRoles(menuList, roles)
+  const filteredMenuList = filterMenuByRoles(menuList, roles, department)
 
   // 添加延时以提升用户体验
   await new Promise((resolve) => setTimeout(resolve, LOADING_DELAY))
@@ -226,7 +227,12 @@ async function processFrontendMenu(router: Router): Promise<void> {
  */
 async function processBackendMenu(router: Router): Promise<void> {
   const { menuList } = await fetchGetMenuList()
-  await registerAndStoreMenu(router, menuList)
+  const normalizedMenuList = menuList.map((route) => menuDataToRouter(route))
+  const userStore = useUserStore()
+  const roles = userStore.info.roles || []
+  const department = userStore.info.department
+  const filteredMenuList = filterMenuByRoles(normalizedMenuList, roles, department)
+  await registerAndStoreMenu(router, filteredMenuList)
 }
 
 /**
@@ -289,15 +295,23 @@ function handleMenuError(error: unknown): void {
 /**
  * 根据角色过滤菜单
  */
-const filterMenuByRoles = (menu: AppRouteRecord[], roles: string[]): AppRouteRecord[] => {
+const filterMenuByRoles = (
+  menu: AppRouteRecord[],
+  roles: string[],
+  department?: string
+): AppRouteRecord[] => {
   return menu.reduce((acc: AppRouteRecord[], item) => {
     const itemRoles = item.meta?.roles
-    const hasPermission = !itemRoles || itemRoles.some((role) => roles?.includes(role))
+    const itemDepts = (item.meta as any)?.departments as string[] | undefined
+    const isSuper = roles?.includes('R_SUPER')
+    const roleOk = isSuper || !itemRoles || itemRoles.some((role) => roles?.includes(role))
+    const deptOk = isSuper || !itemDepts || (department ? itemDepts.includes(department) : false)
+    const hasPermission = roleOk && deptOk
 
     if (hasPermission) {
       const filteredItem = { ...item }
       if (filteredItem.children?.length) {
-        filteredItem.children = filterMenuByRoles(filteredItem.children, roles)
+        filteredItem.children = filterMenuByRoles(filteredItem.children, roles, department)
       }
       acc.push(filteredItem)
     }
