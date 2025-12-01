@@ -54,6 +54,12 @@ export const staticRoutes: AppRouteRecordRaw[] = [
     meta: { title: '500', noLogin: true }
   },
   {
+    path: '/form/view/:id',
+    name: 'FormView',
+    component: () => import('@/views/form-design/viewer/index.vue'),
+    meta: { title: 'Form View', noLogin: true, isHideTab: true }
+  },
+  {
     path: '/outside',
     component: () => import('@views/index/index.vue'),
     name: 'Outside',

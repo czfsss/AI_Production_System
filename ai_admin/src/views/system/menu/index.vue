@@ -43,6 +43,7 @@
         :type="dialogType"
         :editData="editData"
         :lockType="lockMenuType"
+        :parentId="parentId"
         @submit="handleSubmit"
       />
     </ElCard>
@@ -51,6 +52,12 @@
 
 <script setup lang="ts">
   import { useMenuStore } from '@/store/modules/menu'
+  import {
+    fetchGetMenuList,
+    fetchAddMenu,
+    fetchUpdateMenu,
+    fetchDeleteMenu
+  } from '@/api/system-manage'
   import { ElMessage, ElMessageBox, ElTag } from 'element-plus'
   import { formatMenuTitle } from '@/router/utils/utils'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
@@ -74,6 +81,7 @@
   const dialogType = ref<'menu' | 'button'>('menu')
   const editData = ref<AppRouteRecord | any>(null)
   const lockMenuType = ref(false)
+  const parentId = ref(0)
 
   // 搜索相关
   const initialSearchState = {
@@ -178,7 +186,7 @@
             }),
             h(ArtButtonTable, {
               type: 'delete',
-              onClick: () => handleDeleteAuth()
+              onClick: () => handleDeleteAuth(row)
             })
           ])
         }
@@ -186,7 +194,7 @@
         return h('div', buttonStyle, [
           h(ArtButtonTable, {
             type: 'add',
-            onClick: () => handleAddAuth(),
+            onClick: () => handleAddAuth(row),
             title: '新增权限'
           }),
           h(ArtButtonTable, {
@@ -195,7 +203,7 @@
           }),
           h(ArtButtonTable, {
             type: 'delete',
-            onClick: () => handleDeleteMenu()
+            onClick: () => handleDeleteMenu(row)
           })
         ])
       }
@@ -254,14 +262,16 @@
 
       if (item.meta?.authList?.length) {
         const authChildren: AppRouteRecord[] = item.meta.authList.map(
-          (auth: { title: string; authMark: string }) => ({
+          (auth: { title: string; authMark: string; id?: number; sort?: number }) => ({
             path: `${item.path}_auth_${auth.authMark}`,
             name: `${String(item.name)}_auth_${auth.authMark}`,
+            id: auth.id,
             meta: {
               title: auth.title,
               authMark: auth.authMark,
               isAuthButton: true,
-              parentPath: item.path
+              parentPath: item.path,
+              sort: auth.sort
             }
           })
         )
@@ -314,14 +324,16 @@
   const handleAddMenu = () => {
     dialogType.value = 'menu'
     editData.value = null
-    lockMenuType.value = true
+    lockMenuType.value = false
+    parentId.value = 0
     dialogVisible.value = true
   }
 
-  const handleAddAuth = () => {
+  const handleAddAuth = (row?: AppRouteRecord) => {
     dialogType.value = 'menu'
     editData.value = null
     lockMenuType.value = false
+    parentId.value = row?.id || 0
     dialogVisible.value = true
   }
 
@@ -329,6 +341,7 @@
     dialogType.value = 'menu'
     editData.value = row
     lockMenuType.value = true
+    parentId.value = 0
     dialogVisible.value = true
   }
 
@@ -336,48 +349,83 @@
     dialogType.value = 'button'
     editData.value = {
       title: row.meta?.title,
-      authMark: row.meta?.authMark
+      authMark: row.meta?.authMark,
+      sort: row.meta?.sort,
+      id: row.id
     }
     lockMenuType.value = false
+    parentId.value = 0
     dialogVisible.value = true
   }
 
-  const handleSubmit = (formData: any) => {
+  const handleSubmit = async (formData: any) => {
     console.log('提交数据:', formData)
-    // 这里可以调用API保存数据
-    getTableData()
+    try {
+      if (formData.id) {
+        await fetchUpdateMenu(formData)
+        ElMessage.success('更新成功')
+      } else {
+        await fetchAddMenu(formData)
+        ElMessage.success('添加成功')
+      }
+      dialogVisible.value = false
+      // Refresh list?
+      // The existing code reloads from store?
+      // getTableData() sets tableData = menuList.value
+      // But menuList comes from store.
+      // We need to refresh the store or fetch from API directly.
+      // Currently fetchGetMenuList is imported but used?
+      // In system-manage.ts, fetchGetMenuList calls /menu/list.
+      // But index.vue uses useMenuStore().
+      // Does useMenuStore call fetchGetMenuList?
+      // Probably.
+      // But we should trigger a store refresh.
+      // Or just call getTableData() if it fetches from API?
+      // Wait, existing getTableData:
+      // tableData.value = menuList.value
+      // So it relies on store.
+      // We need to reload the page or trigger store action.
+      // For now, let's assume user reloads or we implement a fetch.
+      // Let's change getTableData to fetch from API?
+      // The store logic is usually complex (permissions etc).
+      // Let's just prompt success.
+      // Or better: reload window? No.
+      // Let's try to update the list locally or re-fetch.
+      // Since we modified the backend, the store data is stale.
+      // We should ideally call store.dispatch('menu/getMenuList') if available.
+      // Or simple:
+      const res = await fetchGetMenuList()
+      tableData.value = res.menuList
+      // Also update store if possible?
+      // For now, updating tableData is enough for the View.
+    } catch (error) {
+      console.error(error)
+    }
   }
 
-  const handleDeleteMenu = async () => {
+  const handleDeleteMenu = async (row?: AppRouteRecord) => {
+    if (!row) return
     try {
       await ElMessageBox.confirm('确定要删除该菜单吗？删除后无法恢复', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
       })
+      await fetchDeleteMenu({ id: row.id! })
       ElMessage.success('删除成功')
-      getTableData()
+      // Refresh
+      const res = await fetchGetMenuList()
+      tableData.value = res.menuList
     } catch (error) {
       if (error !== 'cancel') {
         ElMessage.error('删除失败')
+        console.error(error)
       }
     }
   }
 
-  const handleDeleteAuth = async () => {
-    try {
-      await ElMessageBox.confirm('确定要删除该权限吗？删除后无法恢复', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      })
-      ElMessage.success('删除成功')
-      getTableData()
-    } catch (error) {
-      if (error !== 'cancel') {
-        ElMessage.error('删除失败')
-      }
-    }
+  const handleDeleteAuth = async (row?: AppRouteRecord) => {
+    handleDeleteMenu(row)
   }
 
   // 展开/收起功能

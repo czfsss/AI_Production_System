@@ -144,7 +144,7 @@
               <div class="user-menu-box">
                 <div class="user-head">
                   <div class="user-wrap">
-                    <span class="name">{{ userInfo.nickname || userInfo.username }}</span>
+                    <span class="name">{{ userInfo.real_name || userInfo.username }}</span>
                   </div>
                 </div>
                 <ul class="user-menu">

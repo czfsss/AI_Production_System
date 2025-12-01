@@ -11,6 +11,7 @@ from api.oauth2 import oauth2_router
 from api.menu import menu_router
 from api.rbac import rbac_router
 from api.department import department_router
+from api.form import form_router
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import os
@@ -69,6 +70,7 @@ app.include_router(oauth2_router, prefix="/oauth2", tags=["OAuth2认证API"])
 app.include_router(menu_router, prefix="/api/menu", tags=["菜单相关API"])
 app.include_router(rbac_router, prefix="/api", tags=["RBAC相关API"])
 app.include_router(department_router, prefix="/api/department", tags=["部门管理API"])
+app.include_router(form_router, prefix="/api/form", tags=["表单相关API"])
 
 
 if __name__ == "__main__":

@@ -45,14 +45,9 @@
         </ElRow>
 
         <ElRow :gutter="20">
-          <ElCol :span="12">
+          <ElCol :span="24">
             <ElFormItem label="图标" prop="icon">
               <ArtIconSelector v-model="form.icon" :iconType="iconType" width="100%" />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="角色权限" prop="roles">
-              <ElInput v-model="rolesString" placeholder="角色权限，多个用逗号分隔" />
             </ElFormItem>
           </ElCol>
         </ElRow>
@@ -191,11 +186,11 @@
     showTextBadge: string
     fixedTab: boolean
     activePath: string
-    roles: string[]
     authName: string
     authLabel: string
     authIcon: string
     authSort: number
+    parentId?: number
   }
 
   interface Props {
@@ -203,6 +198,7 @@
     editData?: AppRouteRecord | any
     type?: 'menu' | 'button'
     lockType?: boolean
+    parentId?: number
   }
 
   interface Emits {
@@ -213,7 +209,8 @@
   const props = withDefaults(defineProps<Props>(), {
     visible: false,
     type: 'menu',
-    lockType: false
+    lockType: false,
+    parentId: 0
   })
 
   const emit = defineEmits<Emits>()
@@ -242,11 +239,11 @@
     showTextBadge: '',
     fixedTab: false,
     activePath: '',
-    roles: [],
     authName: '',
     authLabel: '',
     authIcon: '',
-    authSort: 1
+    authSort: 1,
+    parentId: 0
   })
 
   const rules = reactive<FormRules>({
@@ -272,18 +269,6 @@
     return false
   })
 
-  const rolesString = computed({
-    get: () => form.roles.join(','),
-    set: (value: string) => {
-      form.roles = value
-        ? value
-            .split(',')
-            .map((role) => role.trim())
-            .filter((role) => role)
-        : []
-    }
-  })
-
   const resetForm = () => {
     formRef.value?.resetFields()
     Object.assign(form, {
@@ -305,7 +290,6 @@
       showTextBadge: '',
       fixedTab: false,
       activePath: '',
-      roles: [],
       authName: '',
       authLabel: '',
       authIcon: '',
@@ -338,7 +322,6 @@
       form.showTextBadge = row.meta?.showTextBadge || ''
       form.fixedTab = row.meta?.fixedTab ?? false
       form.activePath = row.meta?.activePath || ''
-      form.roles = row.meta?.roles || []
     } else {
       const row = props.editData
       form.authName = row.title || ''
@@ -375,14 +358,40 @@
 
   watch(
     () => props.visible,
-    (newVal) => {
-      if (newVal) {
+    (val) => {
+      if (val) {
         menuType.value = props.type
-        nextTick(() => {
-          if (props.editData) {
-            loadFormData()
+        // 重置表单
+        resetForm()
+        // 加载数据
+        if (props.editData) {
+          isEdit.value = true
+          const row = props.editData
+          // 映射数据
+          if (props.type === 'button') {
+            form.authName = row.meta?.title || ''
+            form.authLabel = row.meta?.authMark || ''
+            form.authSort = row.meta?.sort || 1
+            form.id = row.id || 0
+          } else {
+            form.name = row.meta?.title || ''
+            form.path = row.path || ''
+            form.label = row.name || ''
+            form.component = row.component || ''
+            form.icon = row.meta?.icon || ''
+            form.sort = row.meta?.sort || 1
+            form.roles = row.meta?.roles || []
+            form.keepAlive = row.meta?.keepAlive
+            form.isHide = row.meta?.isHide
+            form.isHideTab = row.meta?.isHideTab
+            form.isIframe = row.meta?.isIframe
+            form.id = row.id || 0
           }
-        })
+        } else {
+          isEdit.value = false
+          form.id = 0
+          form.parentId = props.parentId
+        }
       }
     }
   )

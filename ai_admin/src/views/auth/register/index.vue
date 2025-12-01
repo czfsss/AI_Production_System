@@ -16,11 +16,18 @@
             </ElFormItem>
 
             <ElFormItem prop="department">
-              <ElInput v-model.trim="formData.department" placeholder="请输入部门" />
+              <ElSelect v-model="formData.department" placeholder="请选择部门" style="width: 100%">
+                <ElOption
+                  v-for="item in departmentOptions"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.name"
+                />
+              </ElSelect>
             </ElFormItem>
 
-            <ElFormItem prop="nickname">
-              <ElInput v-model.trim="formData.nickname" placeholder="请输入昵称" />
+            <ElFormItem prop="realName">
+              <ElInput v-model.trim="formData.realName" placeholder="请输入姓名" />
             </ElFormItem>
 
             <ElFormItem prop="password">
@@ -89,6 +96,7 @@
   import { useRouter } from 'vue-router'
   import { fetchRegister } from '@/api/auth'
   import { useUserStore } from '@/store/modules/user'
+  import { fetchGetDepartmentList } from '@/api/system-manage'
 
   defineOptions({ name: 'Register' })
 
@@ -100,14 +108,24 @@
 
   const systemName = AppConfig.systemInfo.name
   const loading = ref(false)
+  const departmentOptions = ref<any[]>([])
 
   const formData = reactive({
     username: '',
     department: '',
-    nickname: '',
+    realName: '',
     password: '',
     confirmPassword: '',
     agreement: false
+  })
+
+  onMounted(async () => {
+    try {
+      const res = await fetchGetDepartmentList()
+      departmentOptions.value = res.records || []
+    } catch (e) {
+      console.error('Failed to fetch departments', e)
+    }
   })
 
   const validatePass = (rule: any, value: string, callback: any) => {
@@ -140,9 +158,9 @@
       { required: true, message: '请输入部门', trigger: 'blur' },
       { min: 1, max: 50, message: '部门长度为1-50个字符', trigger: 'blur' }
     ],
-    nickname: [
-      { required: true, message: '请输入昵称', trigger: 'blur' },
-      { min: 1, max: 20, message: '昵称长度为1-20个字符', trigger: 'blur' }
+    realName: [
+      { required: true, message: '请输入姓名', trigger: 'blur' },
+      { min: 1, max: 20, message: '姓名长度为1-20个字符', trigger: 'blur' }
     ],
     password: [
       { required: true, validator: validatePass, trigger: 'blur' },
@@ -175,7 +193,7 @@
         username: formData.username,
         password: formData.password,
         confirm_password: formData.confirmPassword,
-        nickname: formData.nickname,
+        real_name: formData.realName,
         department: formData.department
       })
 

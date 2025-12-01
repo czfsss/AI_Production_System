@@ -6,7 +6,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional
-from models.models import User, UserRole, RolePermission, Department, DepartmentPermission, Permission
+from models.models import User, UserRole, RoleMenu, Department, DepartmentMenu, Menu
 from utils.auth_utils import auth_utils
 
 # OAuth2PasswordBearer - FastAPI标准OAuth2方案
@@ -65,19 +65,46 @@ def require_roles(*allowed_roles):
     return role_checker
 
 def require_permissions(*auth_marks):
+    """
+    权限检查依赖函数
+    根据传入的权限标识(auth_mark)列表，校验当前用户是否拥有对应权限
+    权限来源：用户所属角色 + 用户所在部门
+    """
     async def perm_checker(current_user: User = Depends(get_current_user)):
-        user_roles = await UserRole.filter(user=current_user).values_list("role_id", flat=True)
-        role_perm_ids = await RolePermission.filter(role_id__in=list(user_roles)).values_list("permission_id", flat=True)
-        role_marks = await Permission.filter(id__in=list(role_perm_ids)).values_list("auth_mark", flat=True)
+        # 获取用户所有角色ID和Code
+        user_roles_info = await UserRole.filter(user=current_user).values_list("role_id", "role__code")
+        role_ids = [info[0] for info in user_roles_info]
+        role_codes = [info[1] for info in user_roles_info]
+
+        # 超级管理员(R_SUPER)直接放行
+        if "R_SUPER" in role_codes:
+            return current_user
+
+        # 根据角色ID查询对应的菜单ID
+        role_menu_ids = await RoleMenu.filter(role_id__in=role_ids).values_list("menu_id", flat=True)
+        # 查询菜单对应的权限标识
+        role_marks = await Menu.filter(id__in=list(role_menu_ids)).exclude(permission__isnull=True).values_list("permission", flat=True)
+
+        # 初始化部门权限标识列表
         dep_marks = []
+        # 如果用户有所属部门，则继续查询部门权限
         if current_user.department:
             dep = await Department.get_or_none(name=current_user.department)
             if dep:
-                dep_perm_ids = await DepartmentPermission.filter(department=dep).values_list("permission_id", flat=True)
-                dep_marks = await Permission.filter(id__in=list(dep_perm_ids)).values_list("auth_mark", flat=True)
+                # 获取部门关联的菜单ID
+                dep_menu_ids = await DepartmentMenu.filter(department=dep).values_list("menu_id", flat=True)
+                # 查询菜单对应的权限标识
+                dep_marks = await Menu.filter(id__in=list(dep_menu_ids)).exclude(permission__isnull=True).values_list("permission", flat=True)
+
+        # 合并角色权限与部门权限，去重
         marks = set(role_marks) | set(dep_marks)
+
+        # 校验用户是否拥有所需权限
         for m in auth_marks:
             if m not in marks:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
+
+        # 校验通过，返回当前用户
         return current_user
+
     return perm_checker

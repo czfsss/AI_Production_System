@@ -132,3 +132,15 @@ export function fetchSaveDepartmentPermissions(data: {
 }) {
   return request.post({ url: '/department/permissions/save', data })
 }
+
+export function fetchAddMenu(data: any) {
+  return request.post({ url: '/menu/add', data })
+}
+
+export function fetchUpdateMenu(data: any) {
+  return request.post({ url: '/menu/update', data })
+}
+
+export function fetchDeleteMenu(data: { id: number }) {
+  return request.post({ url: '/menu/delete', data })
+}

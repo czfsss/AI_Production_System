@@ -12,16 +12,15 @@
         ref="treeRef"
         :data="processedMenuList"
         show-checkbox
-        node-key="name"
+        node-key="id"
         :default-expand-all="isExpandAll"
-        :default-checked-keys="[1, 2, 3]"
         :props="defaultProps"
         @check="handleTreeCheck"
       >
         <template #default="{ data }">
           <div style="display: flex; align-items: center">
             <span v-if="data.isAuth">
-              {{ data.label }}
+              {{ data.label }} <ElTag size="small" type="info" style="margin-left: 5px">按钮</ElTag>
             </span>
             <span v-else>{{ defaultProps.label(data) }}</span>
           </div>
@@ -30,8 +29,6 @@
     </ElScrollbar>
     <template #footer>
       <div class="dialog-footer">
-        <ElButton @click="outputSelectedData" style="margin-left: 8px">获取选中数据</ElButton>
-
         <ElButton @click="toggleExpandAll">{{ isExpandAll ? '全部收起' : '全部展开' }}</ElButton>
         <ElButton @click="toggleSelectAll" style="margin-left: 8px">{{
           isSelectAll ? '取消全选' : '全部选择'
@@ -43,10 +40,13 @@
 </template>
 
 <script setup lang="ts">
-  import { useMenuStore } from '@/store/modules/menu'
-  import { ElMessage } from 'element-plus'
+  import { ElMessage, ElTree } from 'element-plus'
   import { formatMenuTitle } from '@/router/utils/utils'
-  import { fetchRolePermissions, fetchSaveRolePermissions } from '@/api/system-manage'
+  import {
+    fetchRolePermissions,
+    fetchSaveRolePermissions,
+    fetchGetMenuList
+  } from '@/api/system-manage'
 
   type RoleListItem = Api.SystemManage.RoleListItem
 
@@ -72,10 +72,10 @@
     set: (value) => emit('update:modelValue', value)
   })
 
-  const { menuList } = storeToRefs(useMenuStore())
-  const treeRef = ref()
+  const treeRef = ref<InstanceType<typeof ElTree>>()
   const isExpandAll = ref(true)
   const isSelectAll = ref(false)
+  const rawMenuList = ref<any[]>([])
 
   // 处理菜单数据，将 authList 转换为子节点
   const processedMenuList = computed(() => {
@@ -85,12 +85,11 @@
       // 如果有 authList，将其转换为子节点
       if (node.meta && node.meta.authList && node.meta.authList.length) {
         const authNodes = node.meta.authList.map((auth: any) => ({
-          id: `${node.id}_${auth.authMark}`,
-          name: `${node.name}_${auth.authMark}`,
+          id: auth.id, // 使用按钮的真实ID
           label: auth.title,
           authMark: auth.authMark,
           isAuth: true,
-          checked: auth.checked || false
+          parentId: node.id
         }))
 
         processed.children = processed.children ? [...processed.children, ...authNodes] : authNodes
@@ -104,12 +103,13 @@
       return processed
     }
 
-    return menuList.value.map(processNode)
+    return rawMenuList.value.map(processNode)
   })
 
   const defaultProps = {
     children: 'children',
-    label: (data: any) => formatMenuTitle(data.meta?.title) || ''
+    label: (data: any) =>
+      data.isAuth ? data.label : formatMenuTitle(data.meta?.title) || data.meta?.title || '未命名'
   }
 
   // 监听弹窗打开，初始化权限数据
@@ -118,11 +118,20 @@
     async (newVal) => {
       if (newVal && props.roleData) {
         try {
+          // 1. 获取所有菜单 (树形结构)
+          const menuRes = await fetchGetMenuList()
+          if (menuRes && menuRes.menuList) {
+            rawMenuList.value = menuRes.menuList
+          }
+
+          // 2. 获取角色已有权限
           const res = await fetchRolePermissions({ roleId: props.roleData.roleId })
           // @ts-ignore
-          if (res && res.authMarks) {
-            // @ts-ignore
-            treeRef.value?.setCheckedKeys(res.authMarks)
+          if (res && res.menuIds) {
+            nextTick(() => {
+              // @ts-ignore
+              treeRef.value?.setCheckedKeys(res.menuIds)
+            })
           }
         } catch (error) {
           console.error('获取权限失败:', error)
@@ -134,11 +143,16 @@
   const handleClose = () => {
     visible.value = false
     treeRef.value?.setCheckedKeys([])
+    rawMenuList.value = []
+  }
+
+  const handleTreeCheck = () => {
+    // Optional: Handle check events if needed
   }
 
   const savePermission = async () => {
     if (!props.roleData) return
-    
+
     const tree = treeRef.value
     if (!tree) return
 
@@ -149,7 +163,7 @@
     try {
       await fetchSaveRolePermissions({
         roleId: props.roleData.roleId,
-        authMarks: allKeys
+        menuIds: allKeys // 传递 menuIds
       })
       ElMessage.success('权限保存成功')
       emit('success')
@@ -188,12 +202,12 @@
     isSelectAll.value = !isSelectAll.value
   }
 
-  const getAllNodeKeys = (nodes: any[]): string[] => {
-    const keys: string[] = []
+  const getAllNodeKeys = (nodes: any[]): number[] => {
+    const keys: number[] = []
     const traverse = (nodeList: any[]) => {
       nodeList.forEach((node) => {
-        if (node.name) {
-          keys.push(node.name)
+        if (node.id) {
+          keys.push(node.id)
         }
         if (node.children && node.children.length > 0) {
           traverse(node.children)
@@ -203,51 +217,4 @@
     traverse(nodes)
     return keys
   }
-
-  const handleTreeCheck = () => {
-    const tree = treeRef.value
-    if (!tree) return
-
-    // 使用树组件的getCheckedKeys方法获取选中的节点
-    const checkedKeys = tree.getCheckedKeys()
-    const allKeys = getAllNodeKeys(processedMenuList.value)
-
-    // 判断是否全选：选中的节点数量等于总节点数量
-    isSelectAll.value = checkedKeys.length === allKeys.length && allKeys.length > 0
-  }
-
-  // 输出选中的数据
-  const outputSelectedData = () => {
-    const tree = treeRef.value
-    if (!tree) return
-
-    // 获取选中的节点keys
-    const checkedKeys = tree.getCheckedKeys()
-    // 获取半选中的节点keys（父节点部分选中时）
-    const halfCheckedKeys = tree.getHalfCheckedKeys()
-    // 获取选中的节点数据
-    const checkedNodes = tree.getCheckedNodes()
-    // 获取半选中的节点数据
-    const halfCheckedNodes = tree.getHalfCheckedNodes()
-
-    const selectedData = {
-      checkedKeys,
-      halfCheckedKeys,
-      checkedNodes,
-      halfCheckedNodes,
-      totalChecked: checkedKeys.length,
-      totalHalfChecked: halfCheckedKeys.length
-    }
-
-    console.log('=== 选中的权限数据 ===', selectedData)
-    ElMessage.success(`已输出选中数据到控制台，共选中 ${checkedKeys.length} 个节点`)
-  }
 </script>
-
-<style lang="scss" scoped>
-  .dialog-footer {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-  }
-</style>

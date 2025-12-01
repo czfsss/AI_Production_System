@@ -121,6 +121,53 @@
           formatter: (row) => h('span', {}, row.userName)
         },
         {
+          prop: 'realName',
+          label: '姓名',
+          width: 150,
+          formatter: (row) => h('span', {}, row.realName)
+        },
+        {
+          prop: 'department',
+          label: '部门',
+          width: 150,
+          formatter: (row) => row.department || '-'
+        },
+        {
+          prop: 'userRoles',
+          label: '角色',
+          width: 180,
+          formatter: (row) => {
+            const roles = row.userRoles || []
+
+            // 角色标签颜色映射
+            const getRoleType = (roleName: string) => {
+              if (roleName.includes('Super Admin') || roleName.includes('超级管理员')) {
+                return 'danger' // 红色
+              } else if (roleName.includes('Admin') || roleName.includes('管理员')) {
+                return 'primary' // 蓝色
+              } else {
+                return 'success' // 绿色 (默认普通用户)
+              }
+            }
+
+            return h(
+              'div',
+              { class: 'flex gap-1 flex-wrap' },
+              roles.map((role) =>
+                h(
+                  ElTag,
+                  {
+                    type: getRoleType(role),
+                    size: 'small',
+                    style: 'margin-right: 4px'
+                  },
+                  () => role
+                )
+              )
+            )
+          }
+        },
+        {
           prop: 'userGender',
           label: '性别',
           sortable: true,

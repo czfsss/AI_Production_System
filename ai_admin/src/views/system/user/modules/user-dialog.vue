@@ -9,6 +9,19 @@
       <ElFormItem label="用户名" prop="username">
         <ElInput v-model="formData.username" />
       </ElFormItem>
+      <ElFormItem label="姓名" prop="realName">
+        <ElInput v-model="formData.realName" />
+      </ElFormItem>
+      <ElFormItem label="部门" prop="department">
+        <ElSelect v-model="formData.department" placeholder="请选择部门" style="width: 100%">
+          <ElOption
+            v-for="item in departmentList"
+            :key="item.id"
+            :label="item.name"
+            :value="item.name"
+          />
+        </ElSelect>
+      </ElFormItem>
       <ElFormItem label="密码" prop="password" v-if="dialogType === 'add'">
         <ElInput v-model="formData.password" type="password" show-password />
       </ElFormItem>
@@ -44,7 +57,12 @@
 <script setup lang="ts">
   import type { FormInstance, FormRules } from 'element-plus'
   import { ElMessage } from 'element-plus'
-  import { fetchGetRoleList, fetchAddUser, fetchUpdateUser } from '@/api/system-manage'
+  import {
+    fetchGetRoleList,
+    fetchAddUser,
+    fetchUpdateUser,
+    fetchGetDepartmentList
+  } from '@/api/system-manage'
 
   interface Props {
     visible: boolean
@@ -62,11 +80,16 @@
 
   // 角色列表数据
   const roleList = ref<Api.SystemManage.RoleListItem[]>([])
+  const departmentList = ref<any[]>([])
 
   onMounted(async () => {
     const res = await fetchGetRoleList({ current: 1, size: 100 })
     if (res && res.records) {
       roleList.value = res.records
+    }
+    const deptRes = await fetchGetDepartmentList()
+    if (deptRes && deptRes.records) {
+      departmentList.value = deptRes.records
     }
   })
 
@@ -84,9 +107,11 @@
   // 表单数据
   const formData = reactive({
     username: '',
+    realName: '',
     password: '',
     phone: '',
     gender: '男',
+    department: '',
     role: [] as number[]
   })
 
@@ -96,15 +121,20 @@
       { required: true, message: '请输入用户名', trigger: 'blur' },
       { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
     ],
+    realName: [
+      { required: true, message: '请输入姓名', trigger: 'blur' },
+      { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+    ],
     password: [
       { required: true, message: '请输入密码', trigger: 'blur' },
       { min: 6, max: 20, message: '长度在 6 到 20 个字符', trigger: 'blur' }
     ],
     phone: [
-      { required: true, message: '请输入手机号', trigger: 'blur' },
+      { required: false, message: '请输入手机号', trigger: 'blur' },
       { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号格式', trigger: 'blur' }
     ],
     gender: [{ required: true, message: '请选择性别', trigger: 'blur' }],
+    department: [{ required: false, message: '请选择部门', trigger: 'blur' }],
     role: [{ required: true, message: '请选择角色', trigger: 'blur' }]
   }
 
@@ -118,27 +148,29 @@
     // This is a problem. UserList API returns roleNames.
     // I should change UserList API to return roleIds as well, or mapping is hard.
     // For now, if we don't have roleIds, we might lose the selection in Edit mode.
-    // Let's assume userRoles contains roleIds if I change backend? 
+    // Let's assume userRoles contains roleIds if I change backend?
     // Or I fetch user detail.
     // But for now, let's just clear roles or try to map by name if names are unique.
-    
+
     // Wait, userRoles in UserListItem (from backend) is string[] (names).
     // I need IDs.
     // I will update backend to return roleIds in user list or add user detail API.
     // Or I can map names to IDs using roleList.
-    
+
     let currentRoleIds: number[] = []
-     if (isEdit && row.userRoles) {
-         currentRoleIds = roleList.value
-             .filter(r => row.userRoles.includes(r.roleName))
-             .map(r => r.roleId)
-     }
+    if (isEdit && row.userRoles) {
+      currentRoleIds = roleList.value
+        .filter((r) => row.userRoles.includes(r.roleName))
+        .map((r) => r.roleId)
+    }
 
     Object.assign(formData, {
       username: isEdit ? row.userName || '' : '',
+      realName: isEdit ? row.realName || '' : '',
       password: '',
       phone: isEdit ? row.userPhone || '' : '',
       gender: isEdit ? row.userGender || '男' : '男',
+      department: isEdit ? row.department || '' : '',
       role: currentRoleIds
     })
   }
@@ -150,14 +182,14 @@
       if (visible) {
         // Ensure role list is loaded
         if (roleList.value.length === 0) {
-             fetchGetRoleList({ current: 1, size: 100 }).then(res => {
-                 if (res && res.records) roleList.value = res.records
-                 initFormData()
-             })
-        } else {
+          fetchGetRoleList({ current: 1, size: 100 }).then((res) => {
+            if (res && res.records) roleList.value = res.records
             initFormData()
+          })
+        } else {
+          initFormData()
         }
-        
+
         nextTick(() => {
           formRef.value?.clearValidate()
         })
@@ -173,30 +205,33 @@
     await formRef.value.validate(async (valid) => {
       if (valid) {
         try {
-            if (dialogType.value === 'add') {
-                await fetchAddUser({
-                    username: formData.username,
-                    password: formData.password,
-                    nickname: formData.username,
-                    phone: formData.phone,
-                    gender: formData.gender,
-                    roleIds: formData.role
-                })
-                ElMessage.success('添加成功')
-            } else {
-                await fetchUpdateUser({
-                    userId: props.userData.id,
-                    username: formData.username,
-                    phone: formData.phone,
-                    gender: formData.gender,
-                    roleIds: formData.role
-                })
-                ElMessage.success('更新成功')
-            }
-            dialogVisible.value = false
-            emit('submit')
-        } catch(e) {
-            console.error(e)
+          if (dialogType.value === 'add') {
+            await fetchAddUser({
+              username: formData.username,
+              password: formData.password,
+              real_name: formData.realName,
+              phone: formData.phone,
+              gender: formData.gender,
+              department: formData.department,
+              roleIds: formData.role
+            })
+            ElMessage.success('添加成功')
+          } else {
+            await fetchUpdateUser({
+              userId: props.userData.id,
+              username: formData.username,
+              real_name: formData.realName,
+              phone: formData.phone,
+              gender: formData.gender,
+              department: formData.department,
+              roleIds: formData.role
+            })
+            ElMessage.success('更新成功')
+          }
+          dialogVisible.value = false
+          emit('submit')
+        } catch (e) {
+          console.error(e)
         }
       }
     })

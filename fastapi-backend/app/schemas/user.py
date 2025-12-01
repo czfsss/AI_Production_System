@@ -4,7 +4,7 @@ from typing import Optional, List
 
 # 注册模型
 class RegisterModel(BaseModel):
-    nickname: str  # 昵称
+    real_name: str = Field(description="姓名")  # 姓名
     username: str = Field(
         min_length=2, max_length=50, description="用户名"
     )
@@ -66,14 +66,13 @@ class QueryModel(BaseModel):
 # 登录返回用户信息
 class LoginResponseModel(BaseModel):
     username: str = Field(description="用户名")
-    nickname: str = Field(description="昵称")
+    real_name: str = Field(description="姓名")
     create_time: Optional[str] = Field(default=None, description="创建时间")
     roles: Optional[List[str]] = Field(default=None, description="角色列表")
     permissions: Optional[List[str]] = Field(default=None, description="权限标识列表")
     department: Optional[str] = Field(default=None, description="部门")
     phone: Optional[str] = Field(default=None, description="手机号")
     gender: Optional[str] = Field(default=None, description="性别")
-    avatar: Optional[str] = Field(default=None, description="头像")
     status: Optional[int] = Field(default=None, description="状态")
 
 
@@ -90,14 +89,14 @@ class RefreshTokenModel(BaseModel):
     refresh_token: str = Field(description="刷新令牌")
 
 
-# 修改昵称模型
-class UpdateNicknameModel(BaseModel):
-    nickname: str = Field(min_length=1, max_length=20, description="新昵称")
+# 修改姓名模型
+class UpdateRealNameModel(BaseModel):
+    real_name: str = Field(min_length=1, max_length=20, description="新姓名")
 
-    @validator("nickname")
-    def nickname_must_not_be_empty(cls, v):
+    @validator("real_name")
+    def real_name_must_not_be_empty(cls, v):
         if not v.strip():
-            raise ValueError("昵称不能为空")
+            raise ValueError("姓名不能为空")
         return v.strip()
 
 

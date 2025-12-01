@@ -17,23 +17,21 @@ class RoleUpdate(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str
-    nickname: str
+    real_name: str
     email: Optional[str] = None
     phone: Optional[str] = None
     gender: Optional[str] = None
+    department: Optional[str] = None
     status: int = 1
     roleIds: List[int] = []
 
 class UserUpdate(BaseModel):
     userId: int
     username: Optional[str] = None
-    nickname: Optional[str] = None
+    real_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     gender: Optional[str] = None
+    department: Optional[str] = None
     status: Optional[int] = None
     roleIds: Optional[List[int]] = None
-
-class PermissionAssign(BaseModel):
-    roleId: int
-    authMarks: List[str]

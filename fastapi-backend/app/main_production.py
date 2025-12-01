@@ -5,7 +5,7 @@ from settings import TORTOISE_ORM
 import uvicorn
 from api.user import user_router
 from api.fault import fault_router
-from api.equ_monitor import equ_bending_router
+from api.equ_monitor_ws import equ_bending_router
 import os
 
 app = FastAPI(

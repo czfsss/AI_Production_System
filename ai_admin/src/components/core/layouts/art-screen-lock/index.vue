@@ -18,13 +18,8 @@
     <div v-if="!isLock">
       <ElDialog v-model="visible" :width="370" :show-close="false" @open="handleDialogOpen">
         <div class="lock-content">
-          <img
-            class="cover"
-            :src="userInfo.avatar || defaultAvatar"
-            alt="用户头像"
-            @error="onAvatarError"
-          />
-          <div class="username">{{ userInfo.nickname || userInfo.username }}</div>
+          <img class="cover" :src="defaultAvatar" alt="用户头像" @error="onAvatarError" />
+          <div class="username">{{ userInfo.real_name || userInfo.username }}</div>
           <ElForm ref="formRef" :model="formData" :rules="rules" @submit.prevent="handleLock">
             <ElFormItem prop="password">
               <ElInput
@@ -53,13 +48,8 @@
     <!-- 解锁界面 -->
     <div v-else class="unlock-content">
       <div class="box">
-        <img
-          class="cover"
-          :src="userInfo.avatar || defaultAvatar"
-          alt="用户头像"
-          @error="onAvatarError"
-        />
-        <div class="username">{{ userInfo.nickname || userInfo.username }}</div>
+        <img class="cover" :src="defaultAvatar" alt="用户头像" @error="onAvatarError" />
+        <div class="username">{{ userInfo.real_name || userInfo.username }}</div>
         <ElForm
           ref="unlockFormRef"
           :model="unlockForm"

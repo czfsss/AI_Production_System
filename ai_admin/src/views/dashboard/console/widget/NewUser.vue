@@ -21,11 +21,10 @@
       :header-cell-style="{ background: 'transparent' }"
     >
       <template #default>
-        <el-table-column label="头像" prop="avatar" width="150px">
+        <el-table-column label="用户" prop="username" width="150px">
           <template #default="scope">
             <div style="display: flex; align-items: center">
-              <img class="avatar" :src="scope.row.avatar" alt="avatar" />
-              <span class="user-name">{{ scope.row.username }}</span>
+              <span class="user-name" style="margin-left: 0">{{ scope.row.username }}</span>
             </div>
           </template>
         </el-table-column>
@@ -54,12 +53,6 @@
 
 <script setup lang="ts">
   import { onMounted, ref, reactive } from 'vue-demi'
-  import avatar1 from '@/assets/img/avatar/avatar1.webp'
-  import avatar2 from '@/assets/img/avatar/avatar2.webp'
-  import avatar3 from '@/assets/img/avatar/avatar3.webp'
-  import avatar4 from '@/assets/img/avatar/avatar4.webp'
-  import avatar5 from '@/assets/img/avatar/avatar5.webp'
-  import avatar6 from '@/assets/img/avatar/avatar6.webp'
 
   const radio2 = ref('本月')
 
@@ -71,8 +64,7 @@
       age: 22,
       percentage: 60,
       pro: 0,
-      color: 'rgb(var(--art-primary)) !important',
-      avatar: avatar1
+      color: 'rgb(var(--art-primary)) !important'
     },
     {
       username: '何小荷',
@@ -81,8 +73,7 @@
       age: 21,
       percentage: 20,
       pro: 0,
-      color: 'rgb(var(--art-secondary)) !important',
-      avatar: avatar2
+      color: 'rgb(var(--art-secondary)) !important'
     },
     {
       username: '誶誶淰',
@@ -91,8 +82,7 @@
       age: 23,
       percentage: 60,
       pro: 0,
-      color: 'rgb(var(--art-warning)) !important',
-      avatar: avatar3
+      color: 'rgb(var(--art-warning)) !important'
     },
     {
       username: '发呆草',
@@ -101,8 +91,7 @@
       age: 28,
       percentage: 50,
       pro: 0,
-      color: 'rgb(var(--art-info)) !important',
-      avatar: avatar4
+      color: 'rgb(var(--art-info)) !important'
     },
     {
       username: '甜筒',
@@ -111,8 +100,7 @@
       age: 26,
       percentage: 70,
       pro: 0,
-      color: 'rgb(var(--art-error)) !important',
-      avatar: avatar5
+      color: 'rgb(var(--art-error)) !important'
     },
     {
       username: '冷月呆呆',
@@ -121,8 +109,7 @@
       age: 25,
       percentage: 90,
       pro: 0,
-      color: 'rgb(var(--art-success)) !important',
-      avatar: avatar6
+      color: 'rgb(var(--art-success)) !important'
     }
   ])
 

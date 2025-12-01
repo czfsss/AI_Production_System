@@ -7,11 +7,10 @@ class User(Model):
     id = fields.IntField(pk=True, auto=True, description="自增ID")
     username = fields.CharField(max_length=20, unique=True, description="用户名")
     password = fields.CharField(max_length=100, description="密码")
-    nickname = fields.CharField(max_length=20, description="昵称")
+    real_name = fields.CharField(max_length=20, description="姓名")
     department = fields.CharField(max_length=50, null=True, description="部门")
     phone = fields.CharField(max_length=20, null=True, description="手机号")
     gender = fields.CharField(max_length=10, null=True, description="性别")
-    avatar = fields.CharField(max_length=255, null=True, description="头像")
     status = fields.IntField(default=1, description="状态: 1正常 2禁用")
     create_time = fields.DatetimeField(auto_now_add=True, description="创建时间")
 
@@ -74,46 +73,40 @@ class MachPointMap(Model):
 
 
 class Role(Model):
-    id = fields.IntField(pk=True, auto=True)
-    name = fields.CharField(max_length=50, unique=True)
-    code = fields.CharField(max_length=50, unique=True)
-    description = fields.CharField(max_length=200, null=True)
-    enabled = fields.BooleanField(default=True)
-    create_time = fields.DatetimeField(auto_now_add=True)
+    id = fields.IntField(pk=True, auto=True, description="角色ID")
+    name = fields.CharField(max_length=50, unique=True, description="角色名称")
+    code = fields.CharField(max_length=50, unique=True, description="角色编码")
+    description = fields.CharField(max_length=200, null=True, description="角色描述")
+    enabled = fields.BooleanField(default=True, description="是否启用")
+    create_time = fields.DatetimeField(auto_now_add=True, description="创建时间")
 
     class Meta:
         table = "role"
-
-
-class Permission(Model):
-    id = fields.IntField(pk=True, auto=True)
-    title = fields.CharField(max_length=50)
-    auth_mark = fields.CharField(max_length=50, unique=True)
-
-    class Meta:
-        table = "permission"
+        table_description = "角色表"
 
 
 class UserRole(Model):
-    id = fields.IntField(pk=True, auto=True)
-    user = fields.ForeignKeyField("models.User", related_name="user_roles")
-    role = fields.ForeignKeyField("models.Role", related_name="role_users")
+    id = fields.IntField(pk=True, auto=True, description="自增ID")
+    user = fields.ForeignKeyField("models.User", related_name="user_roles", description="用户")
+    role = fields.ForeignKeyField("models.Role", related_name="role_users", description="角色")
 
     class Meta:
         table = "user_role"
+        table_description = "用户角色关联表"
 
 
-class RolePermission(Model):
-    id = fields.IntField(pk=True, auto=True)
-    role = fields.ForeignKeyField("models.Role", related_name="role_permissions")
-    permission = fields.ForeignKeyField("models.Permission", related_name="permission_roles")
+class RoleMenu(Model):
+    id = fields.IntField(pk=True, auto=True, description="自增ID")
+    role = fields.ForeignKeyField("models.Role", related_name="role_menus", description="角色")
+    menu = fields.ForeignKeyField("models.Menu", related_name="menu_roles", description="菜单")
 
     class Meta:
-        table = "role_permission"
+        table = "role_menu"
+        table_description = "角色菜单关联表"
 
 
 class Department(Model):
-    id = fields.IntField(pk=True, auto=True)
+    id = fields.IntField(pk=True, auto=True, description="部门ID")
     name = fields.CharField(max_length=50, unique=True, description="部门名称")
     code = fields.CharField(max_length=50, unique=True, null=True, description="部门编码")
     description = fields.CharField(max_length=200, null=True, description="部门描述")
@@ -122,14 +115,55 @@ class Department(Model):
 
     class Meta:
         table = "department"
+        table_description = "部门表"
 
 
-class DepartmentPermission(Model):
-    id = fields.IntField(pk=True, auto=True)
-    department = fields.ForeignKeyField("models.Department", related_name="department_permissions")
-    permission = fields.ForeignKeyField("models.Permission", related_name="permission_departments")
+class DepartmentMenu(Model):
+    id = fields.IntField(pk=True, auto=True, description="自增ID")
+    department = fields.ForeignKeyField("models.Department", related_name="department_menus", description="部门")
+    menu = fields.ForeignKeyField("models.Menu", related_name="menu_departments", description="菜单")
 
     class Meta:
-        table = "department_permission"
+        table = "department_menu"
+        table_description = "部门菜单关联表"
+
+
+class Menu(Model):
+    id = fields.IntField(pk=True, auto=True, description="菜单ID")
+    parent = fields.ForeignKeyField("models.Menu", related_name="children", null=True, description="父菜单")
+    title = fields.CharField(max_length=50, description="菜单名称")
+    name = fields.CharField(max_length=50, null=True, description="路由名称")
+    path = fields.CharField(max_length=200, null=True, description="路由路径")
+    component = fields.CharField(max_length=200, null=True, description="组件路径")
+    icon = fields.CharField(max_length=50, null=True, description="图标")
+    sort = fields.IntField(default=1, description="排序")
+    type = fields.CharField(max_length=10, default="menu", description="类型: menu, button")
+    permission = fields.CharField(max_length=100, null=True, description="权限标识")
+    roles = fields.JSONField(null=True, description="角色列表")
+    
+    keep_alive = fields.BooleanField(default=False, description="是否缓存")
+    hidden = fields.BooleanField(default=False, description="是否隐藏")
+    hide_tab = fields.BooleanField(default=False, description="是否隐藏标签")
+    iframe = fields.BooleanField(default=False, description="是否内嵌")
+    
+    create_time = fields.DatetimeField(auto_now_add=True, description="创建时间")
+
+    class Meta:
+        table = "menu"
+        table_description = "菜单表"
+
+
+class Form(Model):
+    id = fields.IntField(pk=True, auto=True, description="自增ID")
+    name = fields.CharField(max_length=100, description="表单名称")
+    description = fields.CharField(max_length=255, null=True, description="表单描述")
+    schema = fields.JSONField(description="表单结构JSON")
+    creator = fields.ForeignKeyField("models.User", related_name="forms", description="创建者", null=True)
+    create_time = fields.DatetimeField(auto_now_add=True, description="创建时间")
+    update_time = fields.DatetimeField(auto_now=True, description="更新时间")
+
+    class Meta:
+        table = "form"
+        table_description = "表单信息表"
 
 

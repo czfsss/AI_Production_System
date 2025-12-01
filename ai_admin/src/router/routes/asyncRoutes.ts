@@ -184,5 +184,35 @@ export const asyncRoutes: AppRouteRecord[] = [
         }
       }
     ]
+  },
+  {
+    path: '/form',
+    name: 'Form',
+    component: RoutesAlias.Layout,
+    meta: {
+      title: '表单生成',
+      icon: '&#xe6de;', // Generic icon from iconfont
+      // roles: ['R_SUPER', 'R_ADMIN']
+    },
+    children: [
+      {
+        path: 'design',
+        name: 'FormDesign',
+        component: () => import('@/views/form-design/index.vue'),
+        meta: {
+          title: '表单设计',
+          keepAlive: true
+        }
+      },
+      {
+        path: 'list',
+        name: 'FormList',
+        component: () => import('@/views/form-design/list/index.vue'),
+        meta: {
+          title: '表单列表',
+          keepAlive: true
+        }
+      }
+    ]
   }
 ]

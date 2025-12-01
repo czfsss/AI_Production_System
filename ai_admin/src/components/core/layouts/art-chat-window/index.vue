@@ -66,7 +66,7 @@
 <script setup lang="ts">
   import { Picture, Paperclip } from '@element-plus/icons-vue'
   import { mittBus } from '@/utils/sys'
-  import meAvatar from '@/assets/img/avatar/avatar5.webp'
+  import defaultAvatar from '@/assets/img/avatar/avatar5.webp'
   import aiAvatar from '@/assets/img/avatar/avatar10.webp'
 
   defineOptions({ name: 'ArtChatWindow' })
@@ -116,7 +116,7 @@
       content: '我想了解一下系统的使用方法。',
       time: '10:01',
       isMe: true,
-      avatar: meAvatar
+      avatar: defaultAvatar
     },
     {
       id: 3,
@@ -132,7 +132,7 @@
       content: '听起来很不错，能具体讲讲数据分析部分吗？',
       time: '10:05',
       isMe: true,
-      avatar: meAvatar
+      avatar: defaultAvatar
     },
     {
       id: 5,
@@ -148,7 +148,7 @@
       content: '太好了，那我如何开始使用呢？',
       time: '10:08',
       isMe: true,
-      avatar: meAvatar
+      avatar: defaultAvatar
     },
     {
       id: 7,
@@ -164,7 +164,7 @@
       content: '明白了，谢谢你的帮助！',
       time: '10:10',
       isMe: true,
-      avatar: meAvatar
+      avatar: defaultAvatar
     },
     {
       id: 9,
@@ -207,7 +207,7 @@
       content: text,
       time: formatCurrentTime(),
       isMe: true,
-      avatar: meAvatar
+      avatar: defaultAvatar
     }
 
     messages.value.push(newMessage)

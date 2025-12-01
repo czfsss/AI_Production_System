@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Body, Depends
-from models.models import Department, DepartmentPermission, Permission, User
+from models.models import Department, User, DepartmentMenu, Menu
 from utils.dependencies import require_permissions
 from tortoise.transactions import in_transaction
 
@@ -67,26 +67,41 @@ async def delete_department(item: dict):
 
 @department_router.get("/permissions", summary="获取部门权限")
 async def get_department_permissions(departmentId: int):
+    """
+    获取部门可见菜单ID列表
+    """
     dep = await Department.get_or_none(id=departmentId)
     if not dep:
         raise HTTPException(status_code=404, detail="部门不存在")
-    dps = await DepartmentPermission.filter(department=dep).prefetch_related("permission")
-    return {"authMarks": [dp.permission.auth_mark for dp in dps]}
+    
+    dms = await DepartmentMenu.filter(department=dep).values_list("menu_id", flat=True)
+    return {"menuIds": list(dms)}
 
 @department_router.post("/permissions/save", summary="保存部门权限")
 async def save_department_permissions(
     data: dict,
     current_user: User = Depends(require_permissions("user:edit"))
 ):
+    """
+    保存部门可见菜单。
+    
+    注意：部门权限仅涉及“可见性”，不涉及操作权限（按钮）。
+    但前端传来的 menuIds 可能包含按钮ID。
+    """
     department_id = data.get("departmentId")
-    auth_marks = data.get("authMarks") or []
+    menu_ids = data.get("menuIds") or []
+    
     dep = await Department.get_or_none(id=department_id)
     if not dep:
         raise HTTPException(status_code=404, detail="部门不存在")
-    await DepartmentPermission.filter(department=dep).delete()
-    for mark in auth_marks:
-        perm = await Permission.get_or_none(auth_mark=mark)
-        if not perm:
-            perm = await Permission.create(title=mark, auth_mark=mark)
-        await DepartmentPermission.create(department=dep, permission=perm)
+    
+    # Clear existing
+    await DepartmentMenu.filter(department=dep).delete()
+    
+    # Add new
+    for mid in menu_ids:
+        menu = await Menu.get_or_none(id=mid)
+        if menu:
+             await DepartmentMenu.create(department=dep, menu=menu)
+             
     return {"message": "保存成功"}

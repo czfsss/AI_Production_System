@@ -1,0 +1,34 @@
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List
+from datetime import datetime
+
+class FormBase(BaseModel):
+    name: str = Field(..., description="表单名称")
+    description: Optional[str] = Field(None, description="表单描述")
+    schema: Dict[str, Any] = Field(..., description="表单结构JSON")
+
+class FormCreate(FormBase):
+    pass
+
+class FormUpdate(BaseModel):
+    name: Optional[str] = Field(None, description="表单名称")
+    description: Optional[str] = Field(None, description="表单描述")
+    schema: Optional[Dict[str, Any]] = Field(None, description="表单结构JSON")
+
+class CreatorInfo(BaseModel):
+    id: int = Field(..., description="用户ID")
+    real_name: str = Field(..., description="真实姓名")
+
+class FormResponse(FormBase):
+    id: int = Field(..., description="表单ID")
+    create_time: datetime = Field(..., description="创建时间")
+    update_time: datetime = Field(..., description="更新时间")
+    creator: Optional[CreatorInfo] = Field(None, description="创建者信息")
+    creator_id: Optional[int] = Field(None, description="创建者ID")
+
+    class Config:
+        from_attributes = True
+
+class FormListResponse(BaseModel):
+    total: int
+    items: List[FormResponse]

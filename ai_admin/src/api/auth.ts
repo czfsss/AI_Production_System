@@ -12,7 +12,7 @@ export function fetchLogin(params: { username: string; password: string }) {
     token_type: string
     user_info: {
       username: string
-      nickname: string
+      real_name: string
       create_time: string | null
       roles?: string[]
       permissions?: string[]
@@ -35,7 +35,7 @@ export function fetchRegister(params: {
   username: string
   password: string
   confirm_password: string
-  nickname: string
+  real_name: string
   department: string
 }) {
   return request.post<{
@@ -44,7 +44,7 @@ export function fetchRegister(params: {
     token_type: string
     user_info: {
       username: string
-      nickname: string
+      real_name: string
       create_time: string | null
       roles?: string[]
       permissions?: string[]
@@ -65,13 +65,12 @@ export function fetchRegister(params: {
 export function fetchGetUserInfo() {
   return request.get<{
     username: string
-    nickname: string
+    real_name: string
     create_time: string | null
     roles?: string[]
     permissions?: string[]
     phone?: string
     gender?: string
-    avatar?: string
     status?: number
     department?: string
   }>({
@@ -83,15 +82,15 @@ export function fetchGetUserInfo() {
   })
 }
 
-export function fetchUpdateNickname(params: { nickname: string }) {
+export function fetchUpdateRealName(params: { real_name: string }) {
   return request.post<{
     username: string
-    nickname: string
+    real_name: string
     create_time: string | null
     roles?: string[]
     permissions?: string[]
   }>({
-    url: '/user/update_nickname',
+    url: '/user/update_real_name',
     data: params,
     showSuccessMessage: true
   })
@@ -104,7 +103,7 @@ export function fetchUpdatePassword(params: {
 }) {
   return request.post<{
     username: string
-    nickname: string
+    real_name: string
     create_time: string | null
     roles?: string[]
     permissions?: string[]
@@ -122,14 +121,13 @@ export function fetchUpdateProfile(params: {
 }) {
   return request.post<{
     username: string
-    nickname: string
+    real_name: string
     create_time: string | null
     roles?: string[]
     permissions?: string[]
     email?: string
     phone?: string
     gender?: string
-    avatar?: string
     status?: number
   }>({
     url: '/user/update_profile',

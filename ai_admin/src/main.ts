@@ -11,6 +11,9 @@ import '@styles/theme-animation.scss'               // 主题切换动画
 import '@styles/el-light.scss'                      // Element 自定义主题（亮色）
 import '@styles/el-dark.scss'                       // Element 自定义主题（暗色）
 import '@styles/dark.scss'                          // 系统主题
+import 'epic-designer/dist/style.css'               // EpicDesigner 样式
+import { EDesigner, EBuilder } from 'epic-designer' // EpicDesigner
+import { setupElementPlus } from '@epic-designer/element-plus' // EpicDesigner ElementPlus 适配
 import '@icons/system/iconfont.css'                 // 系统图标
 import '@utils/sys/console.ts'                      // 控制台输出内容
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
@@ -30,7 +33,11 @@ initRouter(app)
 setupGlobDirectives(app)
 setupErrorHandle(app)
 
+setupElementPlus() // 注册 EpicDesigner Element UI
+
 app.use(language)
+app.component('EDesigner', EDesigner)
+app.component('EBuilder', EBuilder)
 
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)

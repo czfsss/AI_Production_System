@@ -150,7 +150,7 @@
   const { t } = useI18n()
   const userStore = useUserStore()
   const { getUserInfo } = storeToRefs(userStore)
-  const userAvatar = computed(() => getUserInfo.value.avatar || defaultAvatar)
+  const userAvatar = computed(() => defaultAvatar)
   const onAvatarError = (e: Event) => {
     const img = e.target as HTMLImageElement
     if (img && img.src !== defaultAvatar) img.src = defaultAvatar

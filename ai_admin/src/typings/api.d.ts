@@ -50,13 +50,13 @@ declare namespace Api {
     /** 用户信息 */
     interface UserInfo {
       username?: string
-      nickname?: string
+      realName?: string
+      real_name?: string
       create_time?: string | null
       roles?: string[]
       permissions?: string[]
       phone?: string
       gender?: string
-      avatar?: string
       status?: number
       department?: string
       buttons?: string[]
@@ -75,12 +75,12 @@ declare namespace Api {
     /** 用户列表项 */
     interface UserListItem {
       id: number
-      avatar: string
       status: string
       userName: string
       userGender: string
-      nickName: string
+      realName: string
       userPhone: string
+      department?: string
       userEmail: string
       userRoles: string[]
       createBy: string

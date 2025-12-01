@@ -30,12 +30,6 @@
             </ElRow>
 
             <ElRow>
-              <ElFormItem label="昵称" prop="nikeName">
-                <ElInput v-model="form.nikeName" :disabled="!isEdit" />
-              </ElFormItem>
-            </ElRow>
-
-            <ElRow>
               <ElFormItem label="手机" prop="mobile">
                 <ElInput v-model="form.mobile" :disabled="!isEdit" />
               </ElFormItem>
@@ -104,7 +98,7 @@
   import { ElForm, FormInstance, FormRules, ElMessage } from 'element-plus'
   import {
     fetchGetUserInfo,
-    fetchUpdateNickname,
+    fetchUpdateRealName,
     fetchUpdatePassword,
     fetchUpdateProfile
   } from '@/api/auth'
@@ -116,7 +110,6 @@
   const isEditPwd = ref(false)
   const form = reactive({
     realName: '',
-    nikeName: '',
     mobile: '',
     sex: '2',
     department: ''
@@ -132,11 +125,7 @@
 
   const rules = reactive<FormRules>({
     realName: [
-      { required: true, message: '请输入昵称', trigger: 'blur' },
-      { min: 2, max: 50, message: '长度在 2 到 30 个字符', trigger: 'blur' }
-    ],
-    nikeName: [
-      { required: true, message: '请输入昵称', trigger: 'blur' },
+      { required: true, message: '请输入姓名', trigger: 'blur' },
       { min: 2, max: 50, message: '长度在 2 到 30 个字符', trigger: 'blur' }
     ],
     mobile: [{ required: true, message: '请输入手机号码', trigger: 'blur' }],
@@ -159,8 +148,7 @@
     try {
       const data = await fetchGetUserInfo()
       userStore.setUserInfo(data)
-      form.realName = data.nickname || ''
-      form.nikeName = data.nickname || ''
+      form.realName = data.real_name || ''
       form.mobile = data.phone || ''
       form.sex = data.gender === '男' ? '1' : '2'
       form.department = data.department || ''
@@ -175,7 +163,7 @@
       return
     }
     try {
-      await fetchUpdateNickname({ nickname: form.nikeName })
+      await fetchUpdateRealName({ real_name: form.realName })
       const resProfile = await fetchUpdateProfile({
         phone: form.mobile,
         gender: form.sex === '1' ? '男' : '女',
