@@ -71,10 +71,11 @@ interface MenuResponse {
 // 获取菜单数据（优先请求后端，失败则回退到本地模拟）
 export async function fetchGetMenuList(delay = 0): Promise<MenuResponse> {
   try {
-    // 1) 优先尝试后端接口
-    const backendResp = await request.get<MenuResponse>({ url: '/menu/list' })
-    if (backendResp?.menuList && Array.isArray(backendResp.menuList)) {
-      return backendResp
+    const resp = await request.get<any>({ url: '/menu/list' })
+    const list =
+      resp?.menuList ?? resp?.menus ?? resp?.data?.menuList ?? resp?.data?.menus ?? []
+    if (Array.isArray(list)) {
+      return { menuList: list }
     }
   } catch {
     // 忽略错误，进入本地回退

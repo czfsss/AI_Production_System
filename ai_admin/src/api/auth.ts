@@ -105,33 +105,31 @@ export function fetchUpdatePassword(params: {
     username: string
     real_name: string
     create_time: string | null
-    roles?: string[]
-    permissions?: string[]
-  }>({
-    url: '/user/update_password',
-    params,
-    showSuccessMessage: true
-  })
-}
-
-export function fetchUpdateProfile(params: {
-  phone?: string
-  gender?: string
-  department?: string
-}) {
-  return request.post<{
-    username: string
-    real_name: string
-    create_time: string | null
-    roles?: string[]
-    permissions?: string[]
-    email?: string
+    department?: string
     phone?: string
     gender?: string
     status?: number
   }>({
-    url: '/user/update_profile',
+    url: '/user/update_password',
     data: params,
     showSuccessMessage: true
+  })
+}
+
+/**
+ * 刷新令牌
+ * @param params 刷新令牌参数
+ * @returns 新的令牌信息
+ */
+export function fetchRefreshToken(params: { refresh_token: string }) {
+  return request.post<{
+    access_token: string
+    refresh_token: string
+    token_type: string
+    user_info: any
+  }>({
+    url: '/user/refresh',
+    data: params,
+    showErrorMessage: false // 刷新失败由拦截器处理，不显示通用错误
   })
 }

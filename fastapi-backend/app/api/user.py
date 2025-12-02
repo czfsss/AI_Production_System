@@ -51,12 +51,10 @@ async def get_user_rbac(username: str):
     uroles = await UserRole.filter(user=user).prefetch_related("role")
     role_codes = [ur.role.code for ur in uroles]
     if not role_codes:
+        # 兜底逻辑：如果用户没有任何角色，默认分配 R_USER
+        # 仅保留 admin 账号的自动提权作为系统救援通道
         if username == "admin":
             role = await Role.get(code="R_SUPER")
-        elif str(username).startswith("1"):
-            role = await Role.get(code="R_SUPER")
-        elif str(username).startswith("2"):
-            role = await Role.get(code="R_ADMIN")
         else:
             role = await Role.get(code="R_USER")
         await UserRole.create(user=user, role=role)

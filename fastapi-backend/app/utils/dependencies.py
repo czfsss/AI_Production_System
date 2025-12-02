@@ -3,6 +3,7 @@
 使用FastAPI标准的OAuth2PasswordBearer
 """
 
+import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional
@@ -29,6 +30,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
 
     # 获取用户信息
     user = await User.get_or_none(username=username)
+    # logging.info(f"User: {user}")
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -139,7 +139,6 @@ class Menu(Model):
     sort = fields.IntField(default=1, description="排序")
     type = fields.CharField(max_length=10, default="menu", description="类型: menu, button")
     permission = fields.CharField(max_length=100, null=True, description="权限标识")
-    roles = fields.JSONField(null=True, description="角色列表")
     
     keep_alive = fields.BooleanField(default=False, description="是否缓存")
     hidden = fields.BooleanField(default=False, description="是否隐藏")

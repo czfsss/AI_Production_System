@@ -228,11 +228,9 @@ async function processFrontendMenu(router: Router): Promise<void> {
 async function processBackendMenu(router: Router): Promise<void> {
   const { menuList } = await fetchGetMenuList()
   const normalizedMenuList = menuList.map((route) => menuDataToRouter(route))
-  const userStore = useUserStore()
-  const roles = userStore.info.roles || []
-  const department = userStore.info.department
-  const filteredMenuList = filterMenuByRoles(normalizedMenuList, roles, department)
-  await registerAndStoreMenu(router, filteredMenuList)
+  console.log('[menus] backend normalized list:', normalizedMenuList)
+  // 后端已经过滤了权限，前端直接使用
+  await registerAndStoreMenu(router, normalizedMenuList)
 }
 
 /**
@@ -275,8 +273,10 @@ async function registerAndStoreMenu(router: Router, menuList: AppRouteRecord[]):
     throw new Error('获取菜单列表失败，请重新登录')
   }
   const menuStore = useMenuStore()
-  // 递归过滤掉为空的菜单项
-  const list = filterEmptyMenus(menuList)
+  // 不要在前端进行过滤，相信后端返回的数据
+  // const list = filterEmptyMenus(menuList)
+  const list = menuList
+  console.log('[menus] final list to store:', list)
   menuStore.setMenuList(list)
   registerDynamicRoutes(router, list)
   isRouteRegistered.value = true
@@ -324,7 +324,7 @@ const filterMenuByRoles = (
  * 验证菜单列表是否有效
  */
 function isValidMenuList(menuList: AppRouteRecord[]): boolean {
-  return Array.isArray(menuList) && menuList.length > 0
+  return Array.isArray(menuList)
 }
 
 /**

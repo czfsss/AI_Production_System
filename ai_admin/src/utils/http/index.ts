@@ -9,11 +9,6 @@ const REQUEST_TIMEOUT = 15000
 const LOGOUT_DELAY = 500
 const MAX_RETRIES = 0
 const RETRY_DELAY = 1000
-const UNAUTHORIZED_DEBOUNCE_TIME = 3000
-
-/** 401防抖状态 */
-let isUnauthorizedErrorShown = false
-let unauthorizedTimer: NodeJS.Timeout | null = null
 
 /** 扩展 AxiosRequestConfig */
 interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
@@ -22,6 +17,10 @@ interface ExtendedAxiosRequestConfig extends AxiosRequestConfig {
 }
 
 const { VITE_API_URL, VITE_WITH_CREDENTIALS } = import.meta.env
+
+// 刷新Token相关变量
+let isRefreshing = false
+let requestsQueue: Array<(token: string) => void> = []
 
 /** Axios实例 */
 const axiosInstance = axios.create({
@@ -65,14 +64,16 @@ axiosInstance.interceptors.request.use(
 
 /** 响应拦截器 */
 axiosInstance.interceptors.response.use(
-  (response: AxiosResponse<Http.BaseResponse>) => {
+  async (response: AxiosResponse<Http.BaseResponse>) => {
     // 后端API可能返回的数据格式与前端期望不同，这里做兼容处理
     if (response.data) {
       // 如果有code字段，说明是标准API响应格式
       if ('code' in response.data) {
         const { code, msg } = response.data
         if (code === ApiStatus.success) return response
-        if (code === ApiStatus.unauthorized) handleUnauthorizedError(msg)
+        if (code === ApiStatus.unauthorized) {
+          return handleUnauthorizedError(response.config as ExtendedAxiosRequestConfig, msg)
+        }
         throw createHttpError(msg || $t('httpMsg.requestFailed'), code)
       } else {
         return response
@@ -81,7 +82,9 @@ axiosInstance.interceptors.response.use(
     return response
   },
   (error) => {
-    if (error.response?.status === ApiStatus.unauthorized) handleUnauthorizedError()
+    if (error.response?.status === ApiStatus.unauthorized) {
+      return handleUnauthorizedError(error.config)
+    }
     return Promise.reject(handleError(error))
   }
 )
@@ -91,28 +94,73 @@ function createHttpError(message: string, code: number) {
   return new HttpError(message, code)
 }
 
-/** 处理401错误（带防抖） */
-function handleUnauthorizedError(message?: string): never {
-  const error = createHttpError(message || $t('httpMsg.unauthorized'), ApiStatus.unauthorized)
+/** 处理401错误（刷新Token机制） */
+async function handleUnauthorizedError(config: ExtendedAxiosRequestConfig, message?: string) {
+  const userStore = useUserStore()
+  const { refreshToken } = userStore
 
-  if (!isUnauthorizedErrorShown) {
-    isUnauthorizedErrorShown = true
+  // 如果没有刷新令牌，或者当前请求就是刷新请求，直接登出
+  // 注意：config.url 可能是相对路径，也可能包含 baseURL，稳妥起见检查是否包含 refresh 关键字
+  if (!refreshToken || config.url?.includes('/user/refresh')) {
     logOut()
-
-    unauthorizedTimer = setTimeout(resetUnauthorizedError, UNAUTHORIZED_DEBOUNCE_TIME)
-
-    showError(error, true)
-    throw error
+    const error = createHttpError(message || $t('httpMsg.unauthorized'), ApiStatus.unauthorized)
+    // 避免重复弹窗
+    if (!config.url?.includes('/user/refresh')) {
+      showError(error, true)
+    }
+    return Promise.reject(error)
   }
 
-  throw error
-}
+  // 如果正在刷新，将请求加入队列
+  if (isRefreshing) {
+    return new Promise((resolve) => {
+      requestsQueue.push((token) => {
+        if (config.headers) {
+          config.headers['Authorization'] = `Bearer ${token}`
+        }
+        resolve(axiosInstance(config))
+      })
+    })
+  }
 
-/** 重置401防抖状态 */
-function resetUnauthorizedError() {
-  isUnauthorizedErrorShown = false
-  if (unauthorizedTimer) clearTimeout(unauthorizedTimer)
-  unauthorizedTimer = null
+  // 开始刷新
+  isRefreshing = true
+
+  try {
+    // 手动发起刷新请求，避免循环依赖
+    // 这里使用 axiosInstance 发送请求，但由于上面的拦截器会拦截 /user/refresh 的 401 错误并 reject，
+    // 所以如果刷新 token 也失效了，会进入 catch 块
+    const { data } = await axiosInstance.post('/user/refresh', { refresh_token: refreshToken })
+
+    if (data.code === ApiStatus.success) {
+      const newAccessToken = data.data.access_token
+      const newRefreshToken = data.data.refresh_token
+
+      // 更新 store
+      userStore.setToken(newAccessToken, newRefreshToken)
+
+      // 处理队列中的请求
+      requestsQueue.forEach((cb) => cb(newAccessToken))
+      requestsQueue = []
+
+      // 重试当前请求
+      if (config.headers) {
+        config.headers['Authorization'] = `Bearer ${newAccessToken}`
+      }
+      return axiosInstance(config)
+    } else {
+      throw new Error('Refresh failed')
+    }
+  } catch (e) {
+    // 刷新失败，清空队列并登出
+    requestsQueue = []
+    logOut()
+    const error = createHttpError($t('httpMsg.sessionExpired'), ApiStatus.unauthorized)
+    showError(error, true)
+    return Promise.reject(error)
+  } finally {
+    isRefreshing = false
+  }
 }
 
 /** 退出登录函数 */
@@ -201,11 +249,8 @@ const api = {
   put<T>(config: ExtendedAxiosRequestConfig) {
     return retryRequest<T>({ ...config, method: 'PUT' })
   },
-  del<T>(config: ExtendedAxiosRequestConfig) {
+  delete<T>(config: ExtendedAxiosRequestConfig) {
     return retryRequest<T>({ ...config, method: 'DELETE' })
-  },
-  request<T>(config: ExtendedAxiosRequestConfig) {
-    return retryRequest<T>(config)
   }
 }
 

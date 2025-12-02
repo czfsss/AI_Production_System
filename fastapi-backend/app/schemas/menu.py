@@ -4,7 +4,6 @@ from typing import List, Optional, Any
 class MenuMeta(BaseModel):
     title: str
     icon: Optional[str] = None
-    roles: Optional[List[str]] = None
     keepAlive: Optional[bool] = None
     isHide: Optional[bool] = None
     isHideTab: Optional[bool] = None
@@ -39,7 +38,6 @@ class MenuCreate(BaseModel):
     isHideTab: bool = False
     isIframe: bool = False
     fixedTab: bool = False
-    roles: List[str] = []
     
     # Button specific
     authName: Optional[str] = None

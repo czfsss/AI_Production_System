@@ -129,8 +129,12 @@
         // 如果有子菜单，递归过滤子菜单
         if (item.children && item.children.length > 0) {
           const filteredChildren = filterRoutes(item.children)
-          // 如果所有子菜单都被过滤掉了，则隐藏父菜单
-          return filteredChildren.length > 0
+          // 如果所有子菜单都被过滤掉了，但父菜单本身不是目录（有 path），则保留父菜单
+          // 否则隐藏父菜单
+          if (filteredChildren.length === 0) {
+            return !!item.component && item.component !== 'Layout'
+          }
+          return true
         }
 
         // 叶子节点且未被隐藏，保留

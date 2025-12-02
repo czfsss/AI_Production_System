@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends, Body
-from models.models import Menu, Role, User
+from models.models import Menu, Role, User, UserRole, RoleMenu, Department, DepartmentMenu
 from tortoise.expressions import Q
 from typing import List, Optional, Any
-from utils.dependencies import require_permissions
+from utils.dependencies import require_permissions, get_current_active_user
 # from core.init_menus import ensure_menu_init
 from schemas.menu import MenuSchema, MenuCreate
-
+import logging  
 menu_router = APIRouter()
 
 # --- Helper ---
@@ -36,7 +36,6 @@ def serialize_menu(menu: Menu, all_menus: List[Menu]):
         "meta": {
             "title": menu.title,
             "icon": menu.icon,
-            "roles": menu.roles or [],
             "keepAlive": menu.keep_alive,
             "isHide": menu.hidden,
             "isHideTab": menu.hide_tab,
@@ -54,21 +53,55 @@ def serialize_menu(menu: Menu, all_menus: List[Menu]):
     return res
 
 @menu_router.get("/list", summary="获取菜单列表")
-async def get_menu_list():
+async def get_menu_list(current_user: User = Depends(get_current_active_user)):
     """
     获取系统菜单列表（树形结构）。
+    根据当前用户的角色和部门权限进行过滤。
     """
     # await ensure_menu_init()
     
     all_menus = await Menu.all()
-    top_nodes = [m for m in all_menus if m.parent_id is None]
+    logging.info(current_user)
+    # 获取用户角色
+    user_roles = await UserRole.filter(user=current_user).prefetch_related("role")
+    logging.info(f"User roles: {user_roles}")
+    role_codes = [ur.role.code for ur in user_roles]
+    role_ids = [ur.role.id for ur in user_roles]
+    logging.info(f"Role codes: {role_codes}, Role IDs: {role_ids}")
+    
+    visible_menus = []
+    
+    # 超级管理员或admin账号拥有所有权限
+    if "R_SUPER" in role_codes or current_user.username == "admin":
+        visible_menus = all_menus
+    else:
+        # 1. 获取角色关联的菜单ID
+        role_menu_ids = await RoleMenu.filter(role_id__in=role_ids).values_list("menu_id", flat=True)
+        
+        # 2. 获取部门关联的菜单ID
+        dep_menu_ids = []
+        if current_user.department:
+            # logging.info(f"Department name: {current_user.department}")
+            dep = await Department.get_or_none(name=current_user.department)
+            logging.info(f"Department: {dep}") 
+            if dep:
+                dep_menu_ids = await DepartmentMenu.filter(department=dep).values_list("menu_id", flat=True)
+        
+        # 3. 取并集
+        visible_ids = set(role_menu_ids) | set(dep_menu_ids)
+        
+        # 4. 过滤菜单
+        visible_menus = [m for m in all_menus if m.id in visible_ids]
+
+    # 构建树形结构
+    top_nodes = [m for m in visible_menus if m.parent_id is None]
     top_nodes.sort(key=lambda x: x.sort)
     
     result = []
     for node in top_nodes:
         # Top level nodes in the hardcoded list usually don't have type='button'
         if node.type == 'menu':
-            result.append(serialize_menu(node, all_menus))
+            result.append(serialize_menu(node, visible_menus))
             
     return {"menuList": result}
 
@@ -104,7 +137,6 @@ async def add_menu(data: dict = Body(...), current_user: User = Depends(require_
             icon=data.get("icon"),
             sort=data.get("sort", 1),
             type="menu",
-            roles=data.get("roles"),
             keep_alive=data.get("keepAlive", False),
             hidden=data.get("isHide", False),
             hide_tab=data.get("isHideTab", False),
@@ -138,7 +170,7 @@ async def update_menu(data: dict = Body(...), current_user: User = Depends(requi
         if "isHide" in data: menu.hidden = data["isHide"]
         if "isHideTab" in data: menu.hide_tab = data["isHideTab"]
         if "isIframe" in data: menu.iframe = data["isIframe"]
-        if "roles" in data: menu.roles = data["roles"]
+        # roles removed from Menu model; role-based visibility is managed via RoleMenu/DepartmentMenu
         
     await menu.save()
     return {"message": "更新成功"}

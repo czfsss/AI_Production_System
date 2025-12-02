@@ -380,7 +380,6 @@
             form.component = row.component || ''
             form.icon = row.meta?.icon || ''
             form.sort = row.meta?.sort || 1
-            form.roles = row.meta?.roles || []
             form.keepAlive = row.meta?.keepAlive
             form.isHide = row.meta?.isHide
             form.isHideTab = row.meta?.isHideTab
