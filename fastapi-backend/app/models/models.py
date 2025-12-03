@@ -137,8 +137,8 @@ class Menu(Model):
     component = fields.CharField(max_length=200, null=True, description="组件路径")
     icon = fields.CharField(max_length=50, null=True, description="图标")
     sort = fields.IntField(default=1, description="排序")
-    type = fields.CharField(max_length=10, default="menu", description="类型: menu, button")
-    permission = fields.CharField(max_length=100, null=True, description="权限标识")
+    type = fields.CharField(max_length=20, default="menu", description="类型: catalogue(目录), menu(菜单)")
+    permission = fields.JSONField(null=True, description="操作权限: ['add', 'edit', 'delete']")
     
     keep_alive = fields.BooleanField(default=False, description="是否缓存")
     hidden = fields.BooleanField(default=False, description="是否隐藏")

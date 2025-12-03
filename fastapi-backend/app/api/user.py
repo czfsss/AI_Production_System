@@ -19,9 +19,13 @@ from utils.dependencies import get_current_active_user
 from datetime import datetime
 import os
 import time
+from fastapi.responses import JSONResponse
 
 
 user_router = APIRouter()
+
+def api_ok(data=None, msg: str = "") -> JSONResponse:
+    return JSONResponse(status_code=200, content={"code": 200, "msg": msg, "data": data})
 
 async def ensure_defaults():
     """
@@ -63,7 +67,16 @@ async def get_user_rbac(username: str):
     # 获取角色对应的菜单权限 (包含菜单和按钮)
     role_menu_ids = await RoleMenu.filter(role__code__in=role_codes).values_list("menu_id", flat=True)
     role_menus = await Menu.filter(id__in=list(role_menu_ids)).exclude(permission__isnull=True)
-    role_marks = [m.permission for m in role_menus if m.permission]
+
+    role_marks = []
+    for m in role_menus:
+        if m.permission:
+            # permission 字段现在是 JSON 列表，需要展开
+            if isinstance(m.permission, list):
+                role_marks.extend(m.permission)
+            else:
+                # 兼容旧数据的字符串格式
+                role_marks.append(str(m.permission))
 
     dep_marks = []
     if user.department:
@@ -72,7 +85,15 @@ async def get_user_rbac(username: str):
             # 获取部门对应的菜单权限 (仅限查看权限，即 type="menu")
             dep_menu_ids = await DepartmentMenu.filter(department=dep).values_list("menu_id", flat=True)
             dep_menus = await Menu.filter(id__in=list(dep_menu_ids), type="menu").exclude(permission__isnull=True)
-            dep_marks = [m.permission for m in dep_menus if m.permission]
+            
+            for m in dep_menus:
+                if m.permission:
+                    # permission 字段现在是 JSON 列表，需要展开
+                    if isinstance(m.permission, list):
+                        dep_marks.extend(m.permission)
+                    else:
+                        # 兼容旧数据的字符串格式
+                        dep_marks.append(str(m.permission))
             
     marks = list(set(role_marks) | set(dep_marks))
     return role_codes, marks
@@ -138,11 +159,14 @@ async def register(item: RegisterModel):
         status=user.status,
     )
 
-    return TokenResponseModel(
-        access_token=tokens["access_token"],
-        refresh_token=tokens["refresh_token"],
-        token_type=tokens["token_type"],
-        user_info=user_info,
+    return api_ok(
+        {
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+            "token_type": tokens["token_type"],
+            "user_info": user_info.dict(),
+        },
+        "注册成功",
     )
 
 
@@ -191,11 +215,14 @@ async def login(item: LoginModel):
         status=user.status,
     )
 
-    return TokenResponseModel(
-        access_token=tokens["access_token"],
-        refresh_token=tokens["refresh_token"],
-        token_type=tokens["token_type"],
-        user_info=user_info,
+    return api_ok(
+        {
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+            "token_type": tokens["token_type"],
+            "user_info": user_info.dict(),
+        },
+        "登录成功",
     )
 
 
@@ -209,18 +236,21 @@ async def get_user_profile(current_user: User = Depends(get_current_active_user)
     返回：基本个人信息 + 角色列表 + 权限标识列表。
     """
     role_codes, marks = await get_user_rbac(current_user.username)
-    return LoginResponseModel(
-        username=current_user.username,
-        real_name=current_user.real_name,
-        create_time=(
-            current_user.create_time.isoformat() if current_user.create_time else None
-        ),
-        roles=role_codes,
-        permissions=marks,
-        department=current_user.department,
-        phone=current_user.phone,
-        gender=current_user.gender,
-        status=current_user.status,
+    return api_ok(
+        {
+            "username": current_user.username,
+            "real_name": current_user.real_name,
+            "create_time": (
+                current_user.create_time.isoformat() if current_user.create_time else None
+            ),
+            "roles": role_codes,
+            "permissions": marks,
+            "department": current_user.department,
+            "phone": current_user.phone,
+            "gender": current_user.gender,
+            "status": current_user.status,
+        },
+        "获取成功",
     )
 
 
@@ -266,16 +296,19 @@ async def update_password(
     current_user.password = hashed_password
     await current_user.save()
 
-    return LoginResponseModel(
-        username=current_user.username,
-        real_name=current_user.real_name,
-        create_time=(
-            current_user.create_time.isoformat() if current_user.create_time else None
-        ),
-        department=current_user.department,
-        phone=current_user.phone,
-        gender=current_user.gender,
-        status=current_user.status,
+    return api_ok(
+        {
+            "username": current_user.username,
+            "real_name": current_user.real_name,
+            "create_time": (
+                current_user.create_time.isoformat() if current_user.create_time else None
+            ),
+            "department": current_user.department,
+            "phone": current_user.phone,
+            "gender": current_user.gender,
+            "status": current_user.status,
+        },
+        "密码已更新",
     )
 
 
@@ -335,11 +368,14 @@ async def refresh_token(item: RefreshTokenModel):
             status=user.status,
         )
 
-        return TokenResponseModel(
-            access_token=tokens["access_token"],
-            refresh_token=tokens["refresh_token"],
-            token_type=tokens["token_type"],
-            user_info=user_info,
+        return api_ok(
+            {
+                "access_token": tokens["access_token"],
+                "refresh_token": tokens["refresh_token"],
+                "token_type": tokens["token_type"],
+                "user_info": user_info.dict(),
+            },
+            "刷新成功",
         )
 
     except HTTPException:
@@ -367,18 +403,21 @@ async def update_real_name(
     await current_user.save()
 
     role_codes, marks = await get_user_rbac(current_user.username)
-    return LoginResponseModel(
-        username=current_user.username,
-        real_name=current_user.real_name,
-        create_time=(
-            current_user.create_time.isoformat() if current_user.create_time else None
-        ),
-        roles=role_codes,
-        permissions=marks,
-        department=current_user.department,
-        phone=current_user.phone,
-        gender=current_user.gender,
-        status=current_user.status,
+    return api_ok(
+        {
+            "username": current_user.username,
+            "real_name": current_user.real_name,
+            "create_time": (
+                current_user.create_time.isoformat() if current_user.create_time else None
+            ),
+            "roles": role_codes,
+            "permissions": marks,
+            "department": current_user.department,
+            "phone": current_user.phone,
+            "gender": current_user.gender,
+            "status": current_user.status,
+        },
+        "姓名修改成功",
     )
 
 @user_router.post("/update_profile", response_model=LoginResponseModel, summary="更新资料")
@@ -406,18 +445,21 @@ async def update_profile(
     if changed:
         await current_user.save()
     role_codes, marks = await get_user_rbac(current_user.username)
-    return LoginResponseModel(
-        username=current_user.username,
-        real_name=current_user.real_name,
-        create_time=(
-            current_user.create_time.isoformat() if current_user.create_time else None
-        ),
-        roles=role_codes,
-        permissions=marks,
-        department=current_user.department,
-        phone=current_user.phone,
-        gender=current_user.gender,
-        status=current_user.status,
+    return api_ok(
+        {
+            "username": current_user.username,
+            "real_name": current_user.real_name,
+            "create_time": (
+                current_user.create_time.isoformat() if current_user.create_time else None
+            ),
+            "roles": role_codes,
+            "permissions": marks,
+            "department": current_user.department,
+            "phone": current_user.phone,
+            "gender": current_user.gender,
+            "status": current_user.status,
+        },
+        "资料更新成功",
     )
 
  
@@ -460,16 +502,19 @@ async def reset_password(item: ResetPasswordModel):
     await user.save()
 
     role_codes, marks = await get_user_rbac(user.username)
-    return LoginResponseModel(
-        username=user.username,
-        real_name=user.real_name,
-        create_time=(user.create_time.isoformat() if user.create_time else None),
-        roles=role_codes,
-        permissions=marks,
-        department=user.department,
-        phone=user.phone,
-        gender=user.gender,
-        status=user.status,
+    return api_ok(
+        {
+            "username": user.username,
+            "real_name": user.real_name,
+            "create_time": (user.create_time.isoformat() if user.create_time else None),
+            "roles": role_codes,
+            "permissions": marks,
+            "department": user.department,
+            "phone": user.phone,
+            "gender": user.gender,
+            "status": user.status,
+        },
+        "密码重置成功",
     )
 
 
@@ -479,4 +524,4 @@ async def logout(current_user: User = Depends(get_current_active_user)):
     """
     退出登录（后端无状态，令牌由前端删除）。
     """
-    return {"message": "退出登录成功"}
+    return api_ok({"message": "退出登录成功"}, "退出登录成功")

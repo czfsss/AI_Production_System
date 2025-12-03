@@ -7,6 +7,7 @@ import { $t } from '@/locales'
 export interface ErrorResponse {
   code: number
   msg: string
+  detail?: string
   data?: unknown
 }
 
@@ -67,6 +68,7 @@ export class HttpError extends Error {
  */
 const getErrorMessage = (status: number): string => {
   const errorMap: Record<number, string> = {
+    [ApiStatus.error]: 'httpMsg.requestFailed',
     [ApiStatus.unauthorized]: 'httpMsg.unauthorized',
     [ApiStatus.forbidden]: 'httpMsg.forbidden',
     [ApiStatus.notFound]: 'httpMsg.notFound',
@@ -94,7 +96,18 @@ export function handleError(error: AxiosError<ErrorResponse>): never {
   }
 
   const statusCode = error.response?.status
-  const errorMessage = error.response?.data?.msg || error.message
+
+  // 尝试解析可能为字符串的响应数据
+  let responseData: any = error.response?.data
+  if (typeof responseData === 'string') {
+    try {
+      responseData = JSON.parse(responseData)
+    } catch {
+      // 解析失败，保持原样
+    }
+  }
+
+  const errorMessage = responseData?.detail || responseData?.msg || error.message
   const requestConfig = error.config
 
   // 处理网络错误
@@ -106,11 +119,36 @@ export function handleError(error: AxiosError<ErrorResponse>): never {
   }
 
   // 处理 HTTP 状态码错误
-  const message = statusCode
-    ? getErrorMessage(statusCode)
-    : errorMessage || $t('httpMsg.requestFailed')
+  // 优先使用后端返回的具体错误消息，如果没有，再使用状态码对应的通用消息
+  const serverMessage =
+    responseData?.detail ||
+    responseData?.msg ||
+    responseData?.message ||
+    responseData?.error ||
+    (typeof responseData === 'string' ? responseData : null)
+
+  // 400 错误特殊处理：如果后端没有返回任何错误信息，则使用默认的 "请求失败"
+  // 但为了避免覆盖后端的详细验证错误（如 Pydantic 校验错误），我们需要更仔细地处理
+  if (statusCode === ApiStatus.error && !serverMessage) {
+      // 尝试提取 Pydantic 的 detail 数组（如果有）
+      if (Array.isArray(responseData?.detail)) {
+          const details = responseData.detail.map((item: any) => item.msg).join('; ')
+          if (details) {
+               throw new HttpError(details, statusCode, {
+                  data: responseData,
+                  url: requestConfig?.url,
+                  method: requestConfig?.method?.toUpperCase()
+              })
+          }
+      }
+  }
+
+  const message =
+    serverMessage ||
+    (statusCode ? getErrorMessage(statusCode) : errorMessage || $t('httpMsg.requestFailed'))
+
   throw new HttpError(message, statusCode || ApiStatus.error, {
-    data: error.response.data,
+    data: responseData,
     url: requestConfig?.url,
     method: requestConfig?.method?.toUpperCase()
   })

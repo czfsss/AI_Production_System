@@ -177,35 +177,54 @@
       align: 'right',
       formatter: (row: AppRouteRecord) => {
         const buttonStyle = { style: 'text-align: right' }
+        const buttons: any[] = []
 
         if (row.meta?.isAuthButton) {
-          return h('div', buttonStyle, [
-            h(ArtButtonTable, {
-              type: 'edit',
-              onClick: () => handleEditAuth(row)
-            }),
-            h(ArtButtonTable, {
-              type: 'delete',
-              onClick: () => handleDeleteAuth(row)
-            })
-          ])
+          if (hasAuth('edit')) {
+            buttons.push(
+              h(ArtButtonTable, {
+                type: 'edit',
+                onClick: () => handleEditAuth(row)
+              })
+            )
+          }
+          if (hasAuth('delete')) {
+            buttons.push(
+              h(ArtButtonTable, {
+                type: 'delete',
+                onClick: () => handleDeleteAuth(row)
+              })
+            )
+          }
+        } else {
+          if (hasAuth('add')) {
+            buttons.push(
+              h(ArtButtonTable, {
+                type: 'add',
+                onClick: () => handleAddAuth(row),
+                title: '新增权限'
+              })
+            )
+          }
+          if (hasAuth('edit')) {
+            buttons.push(
+              h(ArtButtonTable, {
+                type: 'edit',
+                onClick: () => handleEditMenu(row)
+              })
+            )
+          }
+          if (hasAuth('delete')) {
+            buttons.push(
+              h(ArtButtonTable, {
+                type: 'delete',
+                onClick: () => handleDeleteMenu(row)
+              })
+            )
+          }
         }
 
-        return h('div', buttonStyle, [
-          h(ArtButtonTable, {
-            type: 'add',
-            onClick: () => handleAddAuth(row),
-            title: '新增权限'
-          }),
-          h(ArtButtonTable, {
-            type: 'edit',
-            onClick: () => handleEditMenu(row)
-          }),
-          h(ArtButtonTable, {
-            type: 'delete',
-            onClick: () => handleDeleteMenu(row)
-          })
-        ])
+        return h('div', buttonStyle, buttons)
       }
     }
   ])

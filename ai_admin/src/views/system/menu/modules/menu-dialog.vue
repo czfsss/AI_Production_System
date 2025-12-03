@@ -11,13 +11,13 @@
     <ElForm ref="formRef" :model="form" :rules="rules" label-width="85px">
       <ElFormItem label="菜单类型">
         <ElRadioGroup v-model="menuType" :disabled="disableMenuType">
+          <ElRadioButton value="catalogue" label="catalogue">目录</ElRadioButton>
           <ElRadioButton value="menu" label="menu">菜单</ElRadioButton>
-          <ElRadioButton value="button" label="button">权限</ElRadioButton>
         </ElRadioGroup>
       </ElFormItem>
 
-      <!-- 菜单表单 -->
-      <template v-if="menuType === 'menu'">
+      <!-- 目录/菜单表单 -->
+      <template v-if="['catalogue', 'menu'].includes(menuType)">
         <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="菜单名称" prop="name">
@@ -45,9 +45,35 @@
         </ElRow>
 
         <ElRow :gutter="20">
-          <ElCol :span="24">
+          <ElCol :span="12">
             <ElFormItem label="图标" prop="icon">
               <ArtIconSelector v-model="form.icon" :iconType="iconType" width="100%" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="操作权限" prop="permission">
+              <div style="display: flex; gap: 10px; width: 100%">
+                <ElCheckbox
+                  v-model="checkAll"
+                  :indeterminate="isIndeterminate"
+                  @change="handleCheckAllChange"
+                >
+                  全选
+                </ElCheckbox>
+                <ElSelect
+                  v-model="form.permission"
+                  multiple
+                  collapse-tags
+                  collapse-tags-tooltip
+                  placeholder="请选择操作权限"
+                  style="width: 100%"
+                  @change="handlePermissionChange"
+                >
+                  <ElOption label="新增" value="add" />
+                  <ElOption label="修改" value="edit" />
+                  <ElOption label="删除" value="delete" />
+                </ElSelect>
+              </div>
             </ElFormItem>
           </ElCol>
         </ElRow>
@@ -166,6 +192,7 @@
   import { IconTypeEnum } from '@/enums/appEnum'
   import { formatMenuTitle } from '@/router/utils/utils'
   import type { AppRouteRecord } from '@/types/router'
+  import type { CheckboxValueType } from 'element-plus'
 
   interface MenuFormData {
     id: number
@@ -186,17 +213,14 @@
     showTextBadge: string
     fixedTab: boolean
     activePath: string
-    authName: string
-    authLabel: string
-    authIcon: string
-    authSort: number
+    permission: string[]
     parentId?: number
   }
 
   interface Props {
     visible: boolean
     editData?: AppRouteRecord | any
-    type?: 'menu' | 'button'
+    type?: 'catalogue' | 'menu'
     lockType?: boolean
     parentId?: number
   }
@@ -216,9 +240,14 @@
   const emit = defineEmits<Emits>()
 
   const formRef = ref<FormInstance>()
-  const menuType = ref<'menu' | 'button'>('menu')
+  const menuType = ref<'catalogue' | 'menu'>('menu')
   const isEdit = ref(false)
   const iconType = ref(IconTypeEnum.UNICODE)
+
+  // 权限全选相关
+  const checkAll = ref(false)
+  const isIndeterminate = ref(false)
+  const allPermissions = ['add', 'edit', 'delete']
 
   const form = reactive<MenuFormData>({
     id: 0,
@@ -239,10 +268,7 @@
     showTextBadge: '',
     fixedTab: false,
     activePath: '',
-    authName: '',
-    authLabel: '',
-    authIcon: '',
-    authSort: 1,
+    permission: [],
     parentId: 0
   })
 
@@ -253,13 +279,11 @@
     ],
     path: [{ required: true, message: '请输入路由地址', trigger: 'blur' }],
     label: [{ required: true, message: '输入权限标识', trigger: 'blur' }],
-    component: [{ required: false, message: '请输入组件路径', trigger: 'blur' }],
-    authName: [{ required: true, message: '请输入权限名称', trigger: 'blur' }],
-    authLabel: [{ required: true, message: '请输入权限标识', trigger: 'blur' }]
+    component: [{ required: false, message: '请输入组件路径', trigger: 'blur' }]
   })
 
   const dialogTitle = computed(() => {
-    const type = menuType.value === 'menu' ? '菜单' : '权限'
+    const type = menuType.value === 'menu' ? '菜单' : '目录'
     return isEdit.value ? `编辑${type}` : `新建${type}`
   })
 
@@ -268,6 +292,17 @@
     if (!isEdit.value && menuType.value === 'menu' && props.lockType) return true
     return false
   })
+
+  const handleCheckAllChange = (val: CheckboxValueType) => {
+    form.permission = val ? allPermissions : []
+    isIndeterminate.value = false
+  }
+
+  const handlePermissionChange = (value: string[]) => {
+    const checkedCount = value.length
+    checkAll.value = checkedCount === allPermissions.length
+    isIndeterminate.value = checkedCount > 0 && checkedCount < allPermissions.length
+  }
 
   const resetForm = () => {
     formRef.value?.resetFields()
@@ -290,45 +325,52 @@
       showTextBadge: '',
       fixedTab: false,
       activePath: '',
-      authName: '',
-      authLabel: '',
-      authIcon: '',
-      authSort: 1
+      permission: []
     })
+    checkAll.value = false
+    isIndeterminate.value = false
   }
 
   const loadFormData = () => {
     if (!props.editData) return
 
     isEdit.value = true
+    const row = props.editData
 
-    if (menuType.value === 'menu') {
-      const row = props.editData
-      form.id = row.id || 0
-      form.name = formatMenuTitle(row.meta?.title || '')
-      form.path = row.path || ''
-      form.label = row.name || ''
-      form.component = row.component || ''
-      form.icon = row.meta?.icon || ''
-      form.sort = row.meta?.sort || 1
-      form.isMenu = row.meta?.isMenu ?? true
-      form.keepAlive = row.meta?.keepAlive ?? false
-      form.isHide = row.meta?.isHide ?? false
-      form.isHideTab = row.meta?.isHideTab ?? false
-      form.isEnable = row.meta?.isEnable ?? true
-      form.link = row.meta?.link || ''
-      form.isIframe = row.meta?.isIframe ?? false
-      form.showBadge = row.meta?.showBadge ?? false
-      form.showTextBadge = row.meta?.showTextBadge || ''
-      form.fixedTab = row.meta?.fixedTab ?? false
-      form.activePath = row.meta?.activePath || ''
+    // 判断类型: 根据 row.type 或 menuType 判断
+    if (row.type === 'catalogue' || row.menuType === 'catalogue') {
+      menuType.value = 'catalogue'
     } else {
-      const row = props.editData
-      form.authName = row.title || ''
-      form.authLabel = row.authMark || ''
-      form.authIcon = row.icon || ''
-      form.authSort = row.sort || 1
+      menuType.value = 'menu'
     }
+
+    form.id = row.id || 0
+    form.name = formatMenuTitle(row.meta?.title || '')
+    form.path = row.path || ''
+    form.label = row.name || ''
+    form.component = row.component || ''
+    form.icon = row.meta?.icon || ''
+    form.sort = row.meta?.sort || 1
+    form.isMenu = row.meta?.isMenu ?? true
+    form.keepAlive = row.meta?.keepAlive ?? false
+    form.isHide = row.meta?.isHide ?? false
+    form.isHideTab = row.meta?.isHideTab ?? false
+    form.isEnable = row.meta?.isEnable ?? true
+    form.link = row.meta?.link || ''
+    form.isIframe = row.meta?.isIframe ?? false
+    form.showBadge = row.meta?.showBadge ?? false
+    form.showTextBadge = row.meta?.showTextBadge || ''
+    form.fixedTab = row.meta?.fixedTab ?? false
+    form.activePath = row.meta?.activePath || ''
+
+    // 处理权限回显
+    if (row.meta?.authList && Array.isArray(row.meta.authList)) {
+      form.permission = row.meta.authList.map((item: any) => item.authMark || item)
+    } else {
+      form.permission = []
+    }
+
+    handlePermissionChange(form.permission)
   }
 
   const handleSubmit = async () => {
@@ -337,7 +379,11 @@
     await formRef.value.validate(async (valid) => {
       if (valid) {
         try {
-          emit('submit', { ...form })
+          // 构造提交数据
+          const submitData: any = { ...form }
+          submitData.menuType = menuType.value // 确保提交 menuType
+
+          emit('submit', submitData)
           ElMessage.success(`${isEdit.value ? '编辑' : '新增'}成功`)
           handleCancel()
         } catch {
@@ -360,47 +406,18 @@
     () => props.visible,
     (val) => {
       if (val) {
-        menuType.value = props.type
-        // 重置表单
-        resetForm()
-        // 加载数据
         if (props.editData) {
-          isEdit.value = true
-          const row = props.editData
-          // 映射数据
-          if (props.type === 'button') {
-            form.authName = row.meta?.title || ''
-            form.authLabel = row.meta?.authMark || ''
-            form.authSort = row.meta?.sort || 1
-            form.id = row.id || 0
-          } else {
-            form.name = row.meta?.title || ''
-            form.path = row.path || ''
-            form.label = row.name || ''
-            form.component = row.component || ''
-            form.icon = row.meta?.icon || ''
-            form.sort = row.meta?.sort || 1
-            form.keepAlive = row.meta?.keepAlive
-            form.isHide = row.meta?.isHide
-            form.isHideTab = row.meta?.isHideTab
-            form.isIframe = row.meta?.isIframe
-            form.id = row.id || 0
-          }
+          loadFormData()
         } else {
-          isEdit.value = false
-          form.id = 0
+          resetForm()
+          // 如果 props.type 是 catalogue/menu，则设置
+          if (props.type === 'catalogue' || props.type === 'menu') {
+            menuType.value = props.type
+          } else {
+            menuType.value = 'menu' // 默认
+          }
           form.parentId = props.parentId
         }
-      }
-    }
-  )
-
-  // 监听 type 变化
-  watch(
-    () => props.type,
-    (newType) => {
-      if (props.visible) {
-        menuType.value = newType
       }
     }
   )

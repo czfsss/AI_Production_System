@@ -15,17 +15,10 @@ def serialize_menu(menu: Menu, all_menus: List[Menu]):
     children.sort(key=lambda x: x.sort)
     
     menu_children = []
-    auth_list = []
     
     for child in children:
-        if child.type == 'button':
-            auth_list.append({
-                "title": child.title,
-                "authMark": child.permission,
-                "id": child.id,
-                "sort": child.sort
-            })
-        else:
+        # Only process 'catalogue' and 'menu' types for recursive structure
+        if child.type in ['catalogue', 'menu']:
             menu_children.append(serialize_menu(child, all_menus))
             
     res = {
@@ -41,12 +34,12 @@ def serialize_menu(menu: Menu, all_menus: List[Menu]):
             "isHideTab": menu.hide_tab,
             "isIframe": menu.iframe,
             "sort": menu.sort,
-        }
+            # Convert JSON list to frontend authList format if permission exists
+            "authList": [{"title": p, "authMark": p} for p in (menu.permission or [])] if menu.permission else []
+        },
+        "menuType": menu.type  # Add type to response
     }
     
-    if auth_list:
-        res["meta"]["authList"] = auth_list
-        
     if menu_children:
         res["children"] = menu_children
         
@@ -99,54 +92,41 @@ async def get_menu_list(current_user: User = Depends(get_current_active_user)):
     
     result = []
     for node in top_nodes:
-        # Top level nodes in the hardcoded list usually don't have type='button'
-        if node.type == 'menu':
+        # Process top-level nodes
+        if node.type in ['catalogue', 'menu']:
             result.append(serialize_menu(node, visible_menus))
             
     return {"menuList": result}
 
 @menu_router.post("/add", summary="新增菜单")
-async def add_menu(data: dict = Body(...), current_user: User = Depends(require_permissions("user:edit"))):
+async def add_menu(data: dict = Body(...), current_user: User = Depends(require_permissions("add"))):
     """
-    新增菜单或权限按钮。
+    新增菜单。
     """
     
     parent_id = data.get("parentId")
+    menu_type = data.get("menuType", "menu")  # Default to 'menu' if not provided
     
-    if data.get("authName"): # It is a button
-        title = data.get("authName")
-        permission = data.get("authLabel")
-        sort = data.get("authSort", 1)
-        
-        menu = await Menu.create(
-            parent_id=parent_id,
-            title=title,
-            permission=permission,
-            type="button",
-            sort=sort,
-            roles=data.get("roles")
-        )
-            
-    else: # It is a menu
-        menu = await Menu.create(
-            parent_id=parent_id,
-            title=data.get("name"), # form.name -> Title
-            name=data.get("label"), # form.label -> Route Name
-            path=data.get("path"),
-            component=data.get("component"),
-            icon=data.get("icon"),
-            sort=data.get("sort", 1),
-            type="menu",
-            keep_alive=data.get("keepAlive", False),
-            hidden=data.get("isHide", False),
-            hide_tab=data.get("isHideTab", False),
-            iframe=data.get("isIframe", False)
-        )
+    menu = await Menu.create(
+        parent_id=parent_id,
+        title=data.get("name"), # form.name -> Title
+        name=data.get("label"), # form.label -> Route Name
+        path=data.get("path"),
+        component=data.get("component"),
+        icon=data.get("icon"),
+        sort=data.get("sort", 1),
+        type=menu_type,
+        permission=data.get("permission"), # JSON list: ['add', 'edit', 'delete']
+        keep_alive=data.get("keepAlive", False),
+        hidden=data.get("isHide", False),
+        hide_tab=data.get("isHideTab", False),
+        iframe=data.get("isIframe", False)
+    )
         
     return {"message": "添加成功", "id": menu.id}
 
 @menu_router.post("/update", summary="更新菜单")
-async def update_menu(data: dict = Body(...), current_user: User = Depends(require_permissions("user:edit"))):
+async def update_menu(data: dict = Body(...), current_user: User = Depends(require_permissions("edit"))):
     menu_id = data.get("id")
     if not menu_id:
         raise HTTPException(status_code=400, detail="ID不能为空")
@@ -155,28 +135,24 @@ async def update_menu(data: dict = Body(...), current_user: User = Depends(requi
     if not menu:
         raise HTTPException(status_code=404, detail="菜单不存在")
         
-    if data.get("authName"): # Update button
-        menu.title = data.get("authName")
-        menu.permission = data.get("authLabel")
-        menu.sort = data.get("authSort", menu.sort)
-    else:
-        if "name" in data: menu.title = data["name"]
-        if "label" in data: menu.name = data["label"]
-        if "path" in data: menu.path = data["path"]
-        if "component" in data: menu.component = data["component"]
-        if "icon" in data: menu.icon = data["icon"]
-        if "sort" in data: menu.sort = data["sort"]
-        if "keepAlive" in data: menu.keep_alive = data["keepAlive"]
-        if "isHide" in data: menu.hidden = data["isHide"]
-        if "isHideTab" in data: menu.hide_tab = data["isHideTab"]
-        if "isIframe" in data: menu.iframe = data["isIframe"]
-        # roles removed from Menu model; role-based visibility is managed via RoleMenu/DepartmentMenu
+    if "name" in data: menu.title = data["name"]
+    if "label" in data: menu.name = data["label"]
+    if "path" in data: menu.path = data["path"]
+    if "component" in data: menu.component = data["component"]
+    if "icon" in data: menu.icon = data["icon"]
+    if "sort" in data: menu.sort = data["sort"]
+    if "keepAlive" in data: menu.keep_alive = data["keepAlive"]
+    if "isHide" in data: menu.hidden = data["isHide"]
+    if "isHideTab" in data: menu.hide_tab = data["isHideTab"]
+    if "isIframe" in data: menu.iframe = data["isIframe"]
+    if "menuType" in data: menu.type = data["menuType"]
+    if "permission" in data: menu.permission = data["permission"]
         
     await menu.save()
     return {"message": "更新成功"}
 
 @menu_router.post("/delete", summary="删除菜单")
-async def delete_menu(data: dict = Body(...), current_user: User = Depends(require_permissions("user:edit"))):
+async def delete_menu(data: dict = Body(...), current_user: User = Depends(require_permissions("delete"))):
     menu_id = data.get("id")
     if not menu_id:
         raise HTTPException(status_code=400, detail="ID不能为空")

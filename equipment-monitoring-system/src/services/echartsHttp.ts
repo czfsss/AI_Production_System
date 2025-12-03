@@ -54,9 +54,8 @@ export class EChartsHttpService {
         requestBody.class_group = params.class_group
       }
       
-      const response = await api.post(API_CONFIG.endpoints.echarts, requestBody)
-      const data = await response.json()
-      return data as EChartsPostData
+      const data = await api.post<EChartsPostData>(API_CONFIG.endpoints.echarts, requestBody)
+      return data
     } catch (error) {
       console.error('[ECharts HTTP] 获取数据失败:', error)
       throw error

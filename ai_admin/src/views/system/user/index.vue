@@ -12,7 +12,7 @@
       <ArtTableHeader v-model:columns="columnChecks" :loading="loading" @refresh="refreshData">
         <template #left>
           <ElSpace wrap>
-            <ElButton @click="showDialog('add')" v-ripple>新增用户</ElButton>
+            <ElButton v-auth="'add'" @click="showDialog('add')" v-ripple>新增用户</ElButton>
           </ElSpace>
         </template>
       </ArtTableHeader>
@@ -47,7 +47,11 @@
   import { fetchGetUserList, fetchDeleteUser } from '@/api/system-manage'
   import UserSearch from './modules/user-search.vue'
   import UserDialog from './modules/user-dialog.vue'
+  import { useAuth } from '@/composables/useAuth'
+
   defineOptions({ name: 'User' })
+
+  const { hasAuth } = useAuth()
 
   type UserListItem = Api.SystemManage.UserListItem
 
@@ -193,17 +197,26 @@
           label: '操作',
           width: 120,
           fixed: 'right', // 固定列
-          formatter: (row) =>
-            h('div', [
-              h(ArtButtonTable, {
-                type: 'edit',
-                onClick: () => showDialog('edit', row)
-              }),
-              h(ArtButtonTable, {
-                type: 'delete',
-                onClick: () => deleteUser(row)
-              })
-            ])
+          formatter: (row) => {
+            const buttons: any[] = []
+            if (hasAuth('edit')) {
+              buttons.push(
+                h(ArtButtonTable, {
+                  type: 'edit',
+                  onClick: () => showDialog('edit', row)
+                })
+              )
+            }
+            if (hasAuth('delete')) {
+              buttons.push(
+                h(ArtButtonTable, {
+                  type: 'delete',
+                  onClick: () => deleteUser(row)
+                })
+              )
+            }
+            return h('div', buttons)
+          }
         }
       ]
     },

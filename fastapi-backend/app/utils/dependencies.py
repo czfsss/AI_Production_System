@@ -85,7 +85,14 @@ def require_permissions(*auth_marks):
         # 根据角色ID查询对应的菜单ID
         role_menu_ids = await RoleMenu.filter(role_id__in=role_ids).values_list("menu_id", flat=True)
         # 查询菜单对应的权限标识
-        role_marks = await Menu.filter(id__in=list(role_menu_ids)).exclude(permission__isnull=True).values_list("permission", flat=True)
+        role_menus = await Menu.filter(id__in=list(role_menu_ids)).exclude(permission__isnull=True)
+        role_marks = []
+        for m in role_menus:
+            if m.permission:
+                if isinstance(m.permission, list):
+                    role_marks.extend(m.permission)
+                else:
+                    role_marks.append(str(m.permission))
 
         # 初始化部门权限标识列表
         dep_marks = []
@@ -96,7 +103,13 @@ def require_permissions(*auth_marks):
                 # 获取部门关联的菜单ID
                 dep_menu_ids = await DepartmentMenu.filter(department=dep).values_list("menu_id", flat=True)
                 # 查询菜单对应的权限标识
-                dep_marks = await Menu.filter(id__in=list(dep_menu_ids)).exclude(permission__isnull=True).values_list("permission", flat=True)
+                dep_menus = await Menu.filter(id__in=list(dep_menu_ids)).exclude(permission__isnull=True)
+                for m in dep_menus:
+                    if m.permission:
+                        if isinstance(m.permission, list):
+                            dep_marks.extend(m.permission)
+                        else:
+                            dep_marks.append(str(m.permission))
 
         # 合并角色权限与部门权限，去重
         marks = set(role_marks) | set(dep_marks)

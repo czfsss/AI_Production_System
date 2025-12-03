@@ -41,9 +41,8 @@ export const userService = {
   // 获取用户信息
   async getUserProfile(): Promise<UserProfile> {
     try {
-      const response = await api.get('/api/user/profile')
-      const data = await response.json()
-      return data as UserProfile
+      const data = await api.get<UserProfile>('/api/user/profile')
+      return data
     } catch (error) {
       console.error('获取用户信息失败:', error)
       throw new Error('获取用户信息失败')
@@ -53,15 +52,8 @@ export const userService = {
   // 修改密码
   async updatePassword(passwordData: UpdatePasswordRequest): Promise<UserProfile> {
     try {
-      const response = await api.post('/api/user/update_password', passwordData)
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || '修改密码失败')
-      }
-      
-      const data = await response.json()
-      return data as UserProfile
+      const data = await api.post<UserProfile>('/api/user/update_password', passwordData)
+      return data
     } catch (error: any) {
       console.error('修改密码失败:', error)
       
@@ -77,9 +69,8 @@ export const userService = {
   // 刷新token
   async refreshToken(refreshTokenData: RefreshTokenRequest): Promise<RefreshTokenResponse> {
     try {
-      const response = await api.post('/api/user/refresh', refreshTokenData)
-      const data = await response.json()
-      return data as RefreshTokenResponse
+      const data = await api.post<RefreshTokenResponse>('/api/user/refresh', refreshTokenData)
+      return data
     } catch (error) {
       console.error('刷新token失败:', error)
       throw new Error('刷新token失败')
@@ -89,15 +80,8 @@ export const userService = {
   // 修改昵称
   async updateNickname(nicknameData: UpdateNicknameRequest): Promise<UserProfile> {
     try {
-      const response = await api.post('/api/user/update_nickname', nicknameData)
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || '修改昵称失败')
-      }
-      
-      const data = await response.json()
-      return data as UserProfile
+      const data = await api.post<UserProfile>('/api/user/update_nickname', nicknameData)
+      return data
     } catch (error: unknown) {
       console.error('修改昵称失败:', error)
       
@@ -113,15 +97,8 @@ export const userService = {
   // 重置密码（通过安全问题）
   async resetPassword(resetData: ResetPasswordRequest): Promise<UserProfile> {
     try {
-      const response = await api.post('/api/user/reset_password', resetData)
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || '重置密码失败')
-      }
-      
-      const data = await response.json()
-      return data as UserProfile
+      const data = await api.post<UserProfile>('/api/user/reset_password', resetData)
+      return data
     } catch (error: unknown) {
       console.error('重置密码失败:', error)
       

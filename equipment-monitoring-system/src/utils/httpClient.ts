@@ -45,12 +45,13 @@ class HttpClient {
         body: JSON.stringify({ refresh_token: authStore.refreshToken })
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        authStore.updateTokens(data.access_token, data.refresh_token)
-        return data.access_token
+      const resData = await response.json()
+      if (resData.code === 200) {
+        const { access_token, refresh_token } = resData.data
+        authStore.updateTokens(access_token, refresh_token)
+        return access_token
       } else {
-        throw new Error('Failed to refresh token')
+        throw new Error(resData.msg || 'Failed to refresh token')
       }
     } catch (error) {
       // 刷新失败，清除认证信息并跳转到登录页
@@ -60,13 +61,13 @@ class HttpClient {
     }
   }
 
-  async request(url: string, options: RequestInit = {}): Promise<Response> {
+  async request<T = any>(url: string, options: RequestInit = {}): Promise<T> {
     const authStore = useAuthStore()
     
     // 添加认证头
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     }
 
     if (authStore.accessToken) {
@@ -88,12 +89,7 @@ class HttpClient {
           return new Promise((resolve, reject) => {
             this.failedQueue.push({ resolve, reject })
           }).then(() => {
-            // 刷新完成后，使用新令牌重新请求
-            const newHeaders = { ...headers }
-            if (authStore.accessToken) {
-              newHeaders['Authorization'] = `Bearer ${authStore.accessToken}`
-            }
-            return fetch(`${this.baseURL}${url}`, { ...requestOptions, headers: newHeaders })
+            return this.request<T>(url, options)
           })
         }
 
@@ -104,12 +100,7 @@ class HttpClient {
           this.isRefreshing = false
           this.processQueue(null)
 
-          // 使用新令牌重新请求
-          const newHeaders = { ...headers }
-          if (authStore.accessToken) {
-            newHeaders['Authorization'] = `Bearer ${authStore.accessToken}`
-          }
-          return fetch(`${this.baseURL}${url}`, { ...requestOptions, headers: newHeaders })
+          return this.request<T>(url, options)
         } catch (refreshError) {
           this.isRefreshing = false
           this.processQueue(refreshError)
@@ -117,35 +108,42 @@ class HttpClient {
         }
       }
 
-      return response
+      // 处理响应数据
+      const data = await response.json()
+      
+      if (data.code === 200) {
+        return data.data as T
+      } else {
+        throw new Error(data.msg || 'Request failed')
+      }
     } catch (error) {
       console.error('HTTP request failed:', error)
       throw error
     }
   }
 
-  async get(url: string, options: RequestInit = {}) {
-    return this.request(url, { ...options, method: 'GET' })
+  async get<T = any>(url: string, options: RequestInit = {}) {
+    return this.request<T>(url, { ...options, method: 'GET' })
   }
 
-  async post(url: string, data?: any, options: RequestInit = {}) {
-    return this.request(url, {
+  async post<T = any>(url: string, data?: any, options: RequestInit = {}) {
+    return this.request<T>(url, {
       ...options,
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     })
   }
 
-  async put(url: string, data?: any, options: RequestInit = {}) {
-    return this.request(url, {
+  async put<T = any>(url: string, data?: any, options: RequestInit = {}) {
+    return this.request<T>(url, {
       ...options,
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
     })
   }
 
-  async delete(url: string, options: RequestInit = {}) {
-    return this.request(url, { ...options, method: 'DELETE' })
+  async delete<T = any>(url: string, options: RequestInit = {}) {
+    return this.request<T>(url, { ...options, method: 'DELETE' })
   }
 }
 
@@ -154,8 +152,8 @@ export const httpClient = new HttpClient(API_CONFIG.baseURL)
 
 // 便捷方法
 export const api = {
-  get: (url: string, options?: RequestInit) => httpClient.get(url, options),
-  post: (url: string, data?: any, options?: RequestInit) => httpClient.post(url, data, options),
-  put: (url: string, data?: any, options?: RequestInit) => httpClient.put(url, data, options),
-  delete: (url: string, options?: RequestInit) => httpClient.delete(url, options),
+  get: <T = any>(url: string, options?: RequestInit) => httpClient.get<T>(url, options),
+  post: <T = any>(url: string, data?: any, options?: RequestInit) => httpClient.post<T>(url, data, options),
+  put: <T = any>(url: string, data?: any, options?: RequestInit) => httpClient.put<T>(url, data, options),
+  delete: <T = any>(url: string, options?: RequestInit) => httpClient.delete<T>(url, options),
 }

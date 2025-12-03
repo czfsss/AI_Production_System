@@ -33,12 +33,11 @@ export function formatEquipmentName(type: string, number: string | number): stri
  */
 export async function queryEquipmentStatus(equipmentName: string): Promise<EquipmentStatusResponse> {
   try {
-    const response = await api.post(
+    const data = await api.post<EquipmentStatusResponse>(
       API_CONFIG.endpoints.equipmentStatus,
       { equ_name: equipmentName }
     )
-    const data = await response.json()
-    return data as EquipmentStatusResponse
+    return data
   } catch (error) {
     console.error('查询设备状态失败:', error)
     throw new Error('查询设备状态失败')

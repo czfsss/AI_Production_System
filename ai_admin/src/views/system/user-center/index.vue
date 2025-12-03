@@ -173,7 +173,7 @@
       ElMessage.success('资料已更新')
       isEdit.value = false
     } catch {
-      ElMessage.error('资料更新失败')
+      // 错误由全局拦截器处理
     }
   }
 
@@ -194,7 +194,7 @@
       pwdForm.newPassword = ''
       pwdForm.confirmPassword = ''
     } catch {
-      ElMessage.error('密码更新失败')
+      // 错误由全局拦截器处理
     }
   }
 </script>

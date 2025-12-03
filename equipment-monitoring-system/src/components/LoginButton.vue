@@ -5,6 +5,7 @@ import { User, ArrowDown, View, Hide, Setting } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { API_CONFIG } from '../config/api'
+import { api } from '../utils/httpClient'
 import UserProfileDialog from './UserProfileDialog.vue'
 
 const authStore = useAuthStore()
@@ -28,7 +29,7 @@ const resetPasswordForm = reactive({
   username: '',
   securityAnswer: '安全第一、预防为主、综合治理',
   newPassword: '',
-  confirmPassword: ''
+  confirmPassword: '',
 })
 // 重置密码相关状态
 const isResetingPassword = ref(false)
@@ -78,7 +79,6 @@ const closeForgotPassword = () => {
   document.body.style.overflow = ''
 }
 
-
 // 打开退出登录确认弹窗
 const openConfirmLogout = () => {
   isConfirmLogoutVisible.value = true
@@ -106,40 +106,39 @@ const closeUserProfile = () => {
 // 处理重置密码
 const handleResetPassword = async (event: Event) => {
   event.preventDefault()
-  
+
   // 验证两次密码输入
   if (resetPasswordForm.newPassword !== resetPasswordForm.confirmPassword) {
     ElMessage.error('两次输入的密码不一致')
     return
   }
-  
+
   // 验证工号格式
   if (!/^\d{7}$/.test(resetPasswordForm.username)) {
     ElMessage.error('工号必须为7位数字')
     return
   }
-  
+
   // 验证密码长度
   if (resetPasswordForm.newPassword.length < 8) {
     ElMessage.error('密码长度至少8位')
     return
   }
-  
+
   try {
     isResetingPassword.value = true
-    
+
     const { userService } = await import('../services/user')
     await userService.resetPassword({
       username: resetPasswordForm.username,
       security_answer: resetPasswordForm.securityAnswer,
       new_password: resetPasswordForm.newPassword,
-      confirm_password: resetPasswordForm.confirmPassword
+      confirm_password: resetPasswordForm.confirmPassword,
     })
-    
+
     ElMessage.success('密码重置成功！请使用新密码登录')
     closeForgotPassword()
     openLoginDialog()
-    
   } catch (error: unknown) {
     console.error('重置密码失败:', error)
     const message = (error as Error).message || '重置密码失败'
@@ -188,56 +187,30 @@ const handleLogin = async (e: Event) => {
   e.preventDefault()
   const form = e.target as HTMLFormElement
   const formData = new FormData(form)
-  
+
   const loginData = {
     username: formData.get('username') as string,
-    password: formData.get('password') as string
+    password: formData.get('password') as string,
   }
-  
+
   try {
     // 调用后端登录API
-    const response = await fetch(`${API_CONFIG.baseURL}/api/user/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(loginData)
-    })
-    
-    if (response.ok) {
-      const userData = await response.json()
-      // 登录成功，更新用户状态
-      authStore.login(userData)
-      isLoginDialogVisible.value = false
-      document.body.style.overflow = ''
-      
-      // 显示成功消息并跳转
-      ElMessage.success('登录成功！')
-      
-      // 立即跳转到监控页面
-      router.push('/monitoring')
-    } else {
-      const errorData = await response.json()
-      let errorMessage = '登录失败'
-      
-      if (response.status === 422) {
-        // 处理422验证错误
-        if (errorData.detail && Array.isArray(errorData.detail)) {
-          // FastAPI验证错误格式
-          errorMessage = errorData.detail.map((err: {loc: string[], msg: string}) => `${err.loc[err.loc.length - 1]}: ${err.msg}`).join(', ')
-        } else {
-          errorMessage = errorData.detail || '表单验证失败'
-        }
-      } else {
-        // 处理其他错误
-        errorMessage = errorData.detail || '账号或密码错误'
-      }
-      
-      alert(errorMessage)
-    }
-  } catch (error) {
+    const userData = await api.post('/api/user/login', loginData)
+
+    // 登录成功，更新用户状态
+    authStore.login(userData)
+    isLoginDialogVisible.value = false
+    document.body.style.overflow = ''
+
+    // 显示成功消息并跳转
+    ElMessage.success('登录成功！')
+
+    // 立即跳转到监控页面
+    router.push('/monitoring')
+  } catch (error: any) {
     console.error('登录请求失败：', error)
-    alert('登录请求失败，请检查网络连接')
+    const message = error.message || '登录请求失败，请检查网络连接'
+    alert(message)
   }
 }
 
@@ -250,7 +223,7 @@ const showSuccessNotification = () => {
     <div class="notification-message">登录成功！</div>
   `
   document.body.appendChild(notification)
-  
+
   // 3秒后自动移除通知
   setTimeout(() => {
     notification.classList.add('fade-out')
@@ -265,53 +238,27 @@ const handleRegister = async (e: Event) => {
   e.preventDefault()
   const form = e.target as HTMLFormElement
   const formData = new FormData(form)
-  
+
   const registerData = {
     nickname: formData.get('nickname') as string,
     username: formData.get('username') as string,
     password: formData.get('password') as string,
-    confirm_password: formData.get('confirmPassword') as string
+    confirm_password: formData.get('confirmPassword') as string,
   }
-  
+
   try {
     // 调用后端注册API
-    const response = await fetch(`${API_CONFIG.baseURL}/api/user/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(registerData)
-    })
-    
-    if (response.ok) {
-      const userData = await response.json()
-      // 注册成功，自动登录
-      authStore.login(userData)
-      isLoginDialogVisible.value = false
-      document.body.style.overflow = ''
-      showSuccessNotification()
-    } else {
-      const errorData = await response.json()
-      let errorMessage = '注册失败'
-      
-      if (response.status === 422) {
-        // 处理422验证错误
-        if (errorData.detail && Array.isArray(errorData.detail)) {
-          // FastAPI验证错误格式
-          errorMessage = errorData.detail.map((err: {loc: string[], msg: string}) => `${err.loc[err.loc.length - 1]}: ${err.msg}`).join(', ')
-        } else {
-          errorMessage = errorData.detail || '表单验证失败'
-        }
-      } else {
-        // 处理其他错误
-        errorMessage = errorData.detail || '未知错误'
-      }
-      
-      alert(errorMessage)
-    }
-  } catch (error) {
+    const userData = await api.post('/api/user/register', registerData)
+
+    // 注册成功，自动登录
+    authStore.login(userData)
+    isLoginDialogVisible.value = false
+    document.body.style.overflow = ''
+    showSuccessNotification()
+  } catch (error: any) {
     console.error('注册请求失败：', error)
-    alert('注册请求失败，请检查网络连接')
+    const message = error.message || '注册请求失败，请检查网络连接'
+    alert(message)
   }
 }
 </script>
@@ -320,9 +267,7 @@ const handleRegister = async (e: Event) => {
   <div class="login-container">
     <!-- 未登录状态显示登录按钮 -->
     <div v-if="!authStore.isLoggedIn">
-      <button class="btn" @click="$router.push('/login')">
-        登录
-      </button>
+      <button class="btn" @click="$router.push('/login')">登录</button>
     </div>
 
     <!-- 登录状态显示用户信息 (保持原有样式) -->
@@ -348,41 +293,98 @@ const handleRegister = async (e: Event) => {
         <div class="heading">{{ isLoginMode ? '登录' : '注册' }}</div>
         <template v-if="isLoginMode">
           <form action="" class="form" @submit="handleLogin">
-            <input required class="input" type="text" name="username" id="username" placeholder="工号(7位数字)" maxlength="7" pattern="\d{7}">
+            <input
+              required
+              class="input"
+              type="text"
+              name="username"
+              id="username"
+              placeholder="工号(7位数字)"
+              maxlength="7"
+              pattern="\d{7}"
+            />
             <div class="password-input-container">
-              <input required class="input" :type="showPassword ? 'text' : 'password'" name="password" id="password" placeholder="密码">
+              <input
+                required
+                class="input"
+                :type="showPassword ? 'text' : 'password'"
+                name="password"
+                id="password"
+                placeholder="密码"
+              />
               <button type="button" class="password-toggle" @click="showPassword = !showPassword">
                 <span v-if="showPassword"><Hide size="18" /></span>
                 <span v-else><View size="18" /></span>
               </button>
             </div>
-            <span class="forgot-password"><a href="#" @click.prevent="openForgotPassword">忘记密码?</a></span>
-            <input class="login-button" type="submit" value="登录">
+            <span class="forgot-password"
+              ><a href="#" @click.prevent="openForgotPassword">忘记密码?</a></span
+            >
+            <input class="login-button" type="submit" value="登录" />
           </form>
         </template>
         <template v-else>
           <form action="" class="form" @submit="handleRegister">
-            <input required class="input" type="text" name="nickname" id="nickname" placeholder="昵称">
-            <input required class="input" type="text" name="username" id="username" placeholder="工号(7位数字)" maxlength="7" pattern="\d{7}">
+            <input
+              required
+              class="input"
+              type="text"
+              name="nickname"
+              id="nickname"
+              placeholder="昵称"
+            />
+            <input
+              required
+              class="input"
+              type="text"
+              name="username"
+              id="username"
+              placeholder="工号(7位数字)"
+              maxlength="7"
+              pattern="\d{7}"
+            />
             <div class="password-input-container">
-              <input required class="input" :type="showRegisterPassword ? 'text' : 'password'" name="password" id="register-password" placeholder="密码">
-              <button type="button" class="password-toggle" @click="showRegisterPassword = !showRegisterPassword">
+              <input
+                required
+                class="input"
+                :type="showRegisterPassword ? 'text' : 'password'"
+                name="password"
+                id="register-password"
+                placeholder="密码"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                @click="showRegisterPassword = !showRegisterPassword"
+              >
                 <span v-if="showRegisterPassword"><Hide size="18" /></span>
                 <span v-else><View size="18" /></span>
               </button>
             </div>
             <div class="password-input-container">
-              <input required class="input" :type="showConfirmPassword ? 'text' : 'password'" name="confirmPassword" id="confirm-password" placeholder="确认密码">
-              <button type="button" class="password-toggle" @click="showConfirmPassword = !showConfirmPassword">
+              <input
+                required
+                class="input"
+                :type="showConfirmPassword ? 'text' : 'password'"
+                name="confirmPassword"
+                id="confirm-password"
+                placeholder="确认密码"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
                 <span v-if="showConfirmPassword"><Hide size="18" /></span>
                 <span v-else><View size="18" /></span>
               </button>
             </div>
-            <input class="login-button" type="submit" value="注册">
+            <input class="login-button" type="submit" value="注册" />
           </form>
         </template>
         <div class="switch-mode">
-          {{ isLoginMode ? '还没有账号?' : '已有账号?' }} <a href="#" @click.prevent="toggleMode">{{ isLoginMode ? '立即注册' : '返回登录' }}</a>
+          {{ isLoginMode ? '还没有账号?' : '已有账号?' }}
+          <a href="#" @click.prevent="toggleMode">{{ isLoginMode ? '立即注册' : '返回登录' }}</a>
         </div>
       </div>
     </div>
@@ -393,67 +395,80 @@ const handleRegister = async (e: Event) => {
         <button class="close-button" @click="closeForgotPassword">×</button>
         <div class="heading">重置密码</div>
         <form @submit.prevent="handleResetPassword" class="form">
-          <input 
-            required 
-            class="input" 
-            type="text" 
+          <input
+            required
+            class="input"
+            type="text"
             v-model="resetPasswordForm.username"
-            placeholder="请输入工号(7位数字)" 
-            maxlength="7" 
+            placeholder="请输入工号(7位数字)"
+            maxlength="7"
             pattern="\d{7}"
-          >
-          
+          />
+
           <div class="security-question">
             <label class="question-label">安全问题：</label>
             <p class="question-text">淮阴卷烟厂的安全生产管理方针是什么？</p>
-            <input 
-              required 
-              class="input" 
-              type="text" 
+            <input
+              required
+              class="input"
+              type="text"
               v-model="resetPasswordForm.securityAnswer"
               placeholder="请输入答案"
-            >
+            />
           </div>
-          
+
           <div class="password-input-container">
-            <input 
-              required 
-              class="input" 
-              :type="showResetNewPassword ? 'text' : 'password'" 
+            <input
+              required
+              class="input"
+              :type="showResetNewPassword ? 'text' : 'password'"
               v-model="resetPasswordForm.newPassword"
               placeholder="新密码(至少8位)"
               minlength="8"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              @click="showResetNewPassword = !showResetNewPassword"
             >
-            <button type="button" class="password-toggle" @click="showResetNewPassword = !showResetNewPassword">
               <span v-if="showResetNewPassword"><Hide size="18" /></span>
               <span v-else><View size="18" /></span>
             </button>
           </div>
-          
+
           <div class="password-input-container">
-            <input 
-              required 
-              class="input" 
-              :type="showResetConfirmPassword ? 'text' : 'password'" 
+            <input
+              required
+              class="input"
+              :type="showResetConfirmPassword ? 'text' : 'password'"
               v-model="resetPasswordForm.confirmPassword"
               placeholder="确认新密码"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              @click="showResetConfirmPassword = !showResetConfirmPassword"
             >
-            <button type="button" class="password-toggle" @click="showResetConfirmPassword = !showResetConfirmPassword">
               <span v-if="showResetConfirmPassword"><Hide size="18" /></span>
               <span v-else><View size="18" /></span>
             </button>
           </div>
-          
-          <button 
-            class="login-button" 
-            type="submit" 
-            :disabled="isResetingPassword"
-          >
+
+          <button class="login-button" type="submit" :disabled="isResetingPassword">
             {{ isResetingPassword ? '重置中...' : '重置密码' }}
           </button>
         </form>
         <div class="switch-mode">
-          <a href="#" @click.prevent="() => { closeForgotPassword(); openLoginDialog(); }">返回登录</a>
+          <a
+            href="#"
+            @click.prevent="
+              () => {
+                closeForgotPassword()
+                openLoginDialog()
+              }
+            "
+            >返回登录</a
+          >
         </div>
       </div>
     </div>
@@ -471,7 +486,7 @@ const handleRegister = async (e: Event) => {
     </div>
 
     <!-- 用户个人设置弹窗 -->
-    <UserProfileDialog 
+    <UserProfileDialog
       :visible="isUserProfileVisible"
       @close="closeUserProfile"
       @updated="handleUserUpdated"
@@ -494,7 +509,7 @@ const handleRegister = async (e: Event) => {
   font-weight: 700;
   transition: 0.6s;
   box-shadow: 0px 0px 60px #1f4c65;
-  -webkit-box-reflect: below 10px linear-gradient(to bottom, rgba(0,0,0,0.0), rgba(0,0,0,0.4));
+  -webkit-box-reflect: below 10px linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.4));
 }
 
 .btn:active {
@@ -502,7 +517,7 @@ const handleRegister = async (e: Event) => {
 }
 
 .btn:hover {
-  background: rgb(2,29,78);
+  background: rgb(2, 29, 78);
   background: linear-gradient(270deg, rgba(2, 29, 78, 0.681) 0%, rgba(31, 215, 232, 0.873) 60%);
   color: rgb(4, 4, 38);
 }
@@ -523,7 +538,7 @@ const handleRegister = async (e: Event) => {
 
 .container {
   max-width: 350px;
-  background: #F8F9FD;
+  background: #f8f9fd;
   background: linear-gradient(0deg, rgb(255, 255, 255) 0%, rgb(244, 247, 251) 100%);
   border-radius: 40px;
   padding: 25px 35px;
@@ -631,7 +646,7 @@ const handleRegister = async (e: Event) => {
 
 .form .input:focus {
   outline: none;
-  border-inline: 2px solid #12B1D1;
+  border-inline: 2px solid #12b1d1;
 }
 
 /* 密码输入框容器 */
@@ -669,9 +684,9 @@ const handleRegister = async (e: Event) => {
 }
 
 .password-toggle:hover {
-  color: #12B1D1;
+  color: #12b1d1;
   background: white;
-  border-color: #12B1D1;
+  border-color: #12b1d1;
   box-shadow: 0 2px 8px rgba(18, 177, 209, 0.3);
 }
 
@@ -745,7 +760,7 @@ const handleRegister = async (e: Event) => {
   position: fixed;
   top: 20px;
   right: 20px;
-  background: linear-gradient(45deg, #4CAF50, #8BC34A);
+  background: linear-gradient(45deg, #4caf50, #8bc34a);
   color: white;
   padding: 15px 20px;
   border-radius: 10px;
@@ -798,14 +813,14 @@ const handleRegister = async (e: Event) => {
     border-radius: 0.6rem; /* 调整圆角 */
     box-shadow: 0px 0px 40px #1f4c65; /* 减小阴影 */
   }
-  
+
   .success-notification {
     top: 10px;
     right: 10px;
     left: 10px;
     padding: 12px 15px;
   }
-  
+
   .notification-message {
     font-size: 14px;
   }

@@ -18,7 +18,7 @@ from utils.auth_utils import auth_utils
 
 rbac_router = APIRouter()
 
-# --- Role Management ---
+# --- 角色管理 ---
 
 @rbac_router.get("/role/list", summary="角色列表")
 async def role_list(current: int = 1, size: int = 20, roleName: str = None, roleCode: str = None):
@@ -60,13 +60,13 @@ async def role_list(current: int = 1, size: int = 20, roleName: str = None, role
     return {"records": data, "total": total, "current": current, "size": size}
 
 @rbac_router.post("/role/add", summary="新增角色")
-async def add_role(role: RoleCreate, current_user: User = Depends(require_permissions("user:edit"))):
+async def add_role(role: RoleCreate, current_user: User = Depends(require_permissions("add"))):
     """
     新增角色。
 
     约束：
     - 角色编码唯一
-    - 需要 `user:edit` 权限
+    - 需要 `add` 权限
     """
     if await Role.filter(code=role.code).exists():
         raise HTTPException(status_code=400, detail="角色编码已存在")
@@ -74,7 +74,7 @@ async def add_role(role: RoleCreate, current_user: User = Depends(require_permis
     return {"message": "添加成功"}
 
 @rbac_router.post("/role/update", summary="更新角色")
-async def update_role(role: RoleUpdate, current_user: User = Depends(require_permissions("user:edit"))):
+async def update_role(role: RoleUpdate, current_user: User = Depends(require_permissions("edit"))):
     """
     更新角色基础信息。
 
@@ -98,13 +98,13 @@ async def update_role(role: RoleUpdate, current_user: User = Depends(require_per
     return {"message": "更新成功"}
 
 @rbac_router.post("/role/delete", summary="删除角色")
-async def delete_role(roleId: int = Body(..., embed=True), current_user: User = Depends(require_permissions("user:edit"))):
+async def delete_role(roleId: int = Body(..., embed=True), current_user: User = Depends(require_permissions("delete"))):
     """
     删除角色。
 
     约束：
     - 系统内置角色（`R_SUPER`, `R_ADMIN`, `R_USER`）不可删除。
-    - 需要 `user:edit` 权限。
+    - 需要 `delete` 权限。
     """
     r = await Role.get_or_none(id=roleId)
     if not r:
@@ -130,7 +130,7 @@ async def get_role_permissions(roleId: int):
     return {"menuIds": list(rms)}
 
 @rbac_router.post("/role/permissions/save", summary="保存角色权限")
-async def save_role_permissions(data: dict = Body(...), current_user: User = Depends(require_permissions("user:edit"))):
+async def save_role_permissions(data: dict = Body(...), current_user: User = Depends(require_permissions("edit"))):
     """
     保存角色的菜单权限分配。
     
@@ -168,7 +168,7 @@ async def save_role_permissions(data: dict = Body(...), current_user: User = Dep
             
     return {"message": "权限保存成功"}
 
-# --- User Management ---
+# --- 用户管理 ---
 
 @rbac_router.get("/user/list", summary="用户列表")
 async def user_list(current: int = 1, size: int = 20, userName: str = None, userPhone: str = None, status: int = None):
@@ -214,7 +214,7 @@ async def user_list(current: int = 1, size: int = 20, userName: str = None, user
     return {"records": data, "total": total, "current": current, "size": size}
 
 @rbac_router.post("/user/add", summary="新增用户")
-async def add_user(user: UserCreate, current_user: User = Depends(require_permissions("user:edit"))):
+async def add_user(user: UserCreate, current_user: User = Depends(require_permissions("add"))):
     """
     新增用户并分配角色。
 
@@ -251,7 +251,7 @@ async def add_user(user: UserCreate, current_user: User = Depends(require_permis
     return {"message": "用户创建成功"}
 
 @rbac_router.post("/user/update", summary="更新用户")
-async def update_user(user: UserUpdate, current_user: User = Depends(require_permissions("user:edit"))):
+async def update_user(user: UserUpdate, current_user: User = Depends(require_permissions("edit"))):
     """
     更新用户信息及角色。
 
@@ -292,7 +292,7 @@ async def update_user(user: UserUpdate, current_user: User = Depends(require_per
     return {"message": "用户更新成功"}
 
 @rbac_router.post("/user/delete", summary="删除用户")
-async def delete_user(userId: int = Body(..., embed=True), current_user: User = Depends(require_permissions("user:edit"))):
+async def delete_user(userId: int = Body(..., embed=True), current_user: User = Depends(require_permissions("delete"))):
     """
     删除用户。
 

@@ -116,6 +116,26 @@ export function fetchUpdatePassword(params: {
   })
 }
 
+export function fetchUpdateProfile(params: {
+  phone?: string
+  gender?: string
+  department?: string
+}) {
+  return request.post<{
+    username: string
+    real_name: string
+    create_time: string | null
+    department?: string
+    phone?: string
+    gender?: string
+    status?: number
+  }>({
+    url: '/user/update_profile',
+    data: params,
+    showSuccessMessage: true
+  })
+}
+
 /**
  * 刷新令牌
  * @param params 刷新令牌参数

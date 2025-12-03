@@ -20,7 +20,7 @@
       >
         <template #left>
           <ElSpace wrap>
-            <ElButton @click="showDialog('add')" v-ripple>新增角色</ElButton>
+            <ElButton v-auth="'add'" @click="showDialog('add')" v-ripple>新增角色</ElButton>
           </ElSpace>
         </template>
       </ArtTableHeader>
@@ -64,8 +64,11 @@
   import RoleSearch from './modules/role-search.vue'
   import RoleEditDialog from './modules/role-edit-dialog.vue'
   import RolePermissionDialog from './modules/role-permission-dialog.vue'
+  import { useAuth } from '@/composables/useAuth'
 
   defineOptions({ name: 'Role' })
+
+  const { hasAuth } = useAuth()
 
   type RoleListItem = Api.SystemManage.RoleListItem
 
@@ -154,30 +157,39 @@
           label: '操作',
           width: 80,
           fixed: 'right',
-          formatter: (row) =>
-            h('div', [
-              h(ArtButtonMore, {
-                list: [
-                  {
-                    key: 'permission',
-                    label: '菜单权限',
-                    icon: Setting
-                  },
-                  {
-                    key: 'edit',
-                    label: '编辑角色',
-                    icon: Edit
-                  },
-                  {
-                    key: 'delete',
-                    label: '删除角色',
-                    icon: Delete,
-                    color: '#f56c6c'
-                  }
-                ],
-                onClick: (item: ButtonMoreItem) => buttonMoreClick(item, row)
+          formatter: (row) => {
+            const list: any[] = []
+            if (hasAuth('edit')) {
+              list.push(
+                {
+                  key: 'permission',
+                  label: '菜单权限',
+                  icon: Setting
+                },
+                {
+                  key: 'edit',
+                  label: '编辑角色',
+                  icon: Edit
+                }
+              )
+            }
+            if (hasAuth('delete')) {
+              list.push({
+                key: 'delete',
+                label: '删除角色',
+                icon: Delete,
+                color: '#f56c6c'
               })
-            ])
+            }
+            return list.length
+              ? h('div', [
+                  h(ArtButtonMore, {
+                    list: list,
+                    onClick: (item: ButtonMoreItem) => buttonMoreClick(item, row)
+                  })
+                ])
+              : h('span')
+          }
         }
       ]
     }

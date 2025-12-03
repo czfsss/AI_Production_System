@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from tortoise.contrib.fastapi import register_tortoise
 from settings import TORTOISE_ORM
@@ -14,6 +14,8 @@ from api.department import department_router
 from api.form import form_router
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 import os
 
 
@@ -37,6 +39,30 @@ async def redirect_to_docs():
 @app.get("/api/health", summary="健康检查")
 async def health():
     return {"status": "ok"}
+
+# 统一响应封装
+def api_response(data=None, msg: str = "", code: int = 200) -> JSONResponse:
+    return JSONResponse(status_code=200, content={"code": code, "msg": msg, "data": data})
+
+# 统一异常处理：HTTPException
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    return api_response(data=None, msg=detail, code=exc.status_code)
+
+# 统一异常处理：请求校验错误（Pydantic）
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    try:
+        details = "; ".join([e.get("msg", "参数错误") for e in exc.errors()])
+    except Exception:
+        details = "请求参数错误"
+    return api_response(data=None, msg=details, code=400)
+
+# 兜底异常处理
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return api_response(data=None, msg="服务器内部错误", code=500)
 
 
 # 配置CORS中间件
