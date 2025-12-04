@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from tortoise import fields
 from tortoise.models import Model
 
@@ -154,6 +155,7 @@ class Menu(Model):
 
 class Form(Model):
     id = fields.IntField(pk=True, auto=True, description="自增ID")
+    uuid = fields.UUIDField(default=uuid.uuid4, unique=True, description="表单唯一标识")
     name = fields.CharField(max_length=100, description="表单名称")
     description = fields.CharField(max_length=255, null=True, description="表单描述")
     schema = fields.JSONField(description="表单结构JSON")
@@ -164,5 +166,19 @@ class Form(Model):
     class Meta:
         table = "form"
         table_description = "表单信息表"
+
+
+class FormSubmission(Model):
+    id = fields.IntField(pk=True, auto=True, description="自增ID")
+    form = fields.ForeignKeyField("models.Form", related_name="submissions", description="所属表单")
+    data = fields.JSONField(description="填报数据")
+    user = fields.ForeignKeyField("models.User", related_name="form_submissions", null=True, description="填报人")
+    is_draft = fields.BooleanField(default=False, description="是否草稿")
+    create_time = fields.DatetimeField(auto_now_add=True, description="提交时间")
+    update_time = fields.DatetimeField(auto_now=True, description="更新时间")
+
+    class Meta:
+        table = "form_submission"
+        table_description = "表单填报记录表"
 
 

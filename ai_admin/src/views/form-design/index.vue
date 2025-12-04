@@ -1,6 +1,7 @@
 <template>
   <div class="form-design-container">
-    <EDesigner @save="handleSubmit" />
+    <!-- 开启单表单模式，根节点默认切换为表单组件，确保后续 EBuilder 能正确校验并收集数据 -->
+    <EDesigner @save="handleSubmit" :formMode="true" />
 
     <el-dialog v-model="dialogVisible" title="保存表单" width="500px">
       <el-form :model="formData" label-width="80px">

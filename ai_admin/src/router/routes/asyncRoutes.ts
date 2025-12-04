@@ -212,6 +212,41 @@ export const asyncRoutes: AppRouteRecord[] = [
           title: '表单列表',
           keepAlive: true
         }
+      },
+      {
+        path: 'edit/:id',
+        name: 'FormEdit',
+        component: () => import('@/views/form-design/edit/index.vue'),
+        meta: {
+          title: '编辑表单',
+          keepAlive: false,
+          isHide: true,
+          activeMenu: '/form/list',
+          isFullPage: true
+        }
+      },
+      {
+        path: 'data/:id',
+        name: 'FormData',
+        component: () => import('@/views/form-design/data/index.vue'),
+        meta: {
+          title: '表单数据',
+          keepAlive: false,
+          isHide: true,
+          activeMenu: '/form/list'
+        }
+      }
+      ,
+      {
+        path: 'stats/:id',
+        name: 'FormStats',
+        component: () => import('@/views/form-design/stats/index.vue'),
+        meta: {
+          title: '图表统计',
+          keepAlive: false,
+          isHide: true,
+          activeMenu: '/form/list'
+        }
       }
     ]
   }

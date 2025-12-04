@@ -10,6 +10,12 @@ import { RoutesAlias } from '../routesAlias'
  * 2、不需要登录就能访问的路由，在 meta 中添加 noLogin: true
  */
 export const staticRoutes: AppRouteRecordRaw[] = [
+  {
+    path: '/submit-form/:uuid',
+    name: 'FormSubmit',
+    component: () => import('@/views/form-design/submit/index.vue'),
+    meta: { title: '表单填报', noLogin: true, isHideTab: true }
+  },
   // 不需要登录就能访问的路由示例
   // {
   //   path: '/welcome',
@@ -41,12 +47,7 @@ export const staticRoutes: AppRouteRecordRaw[] = [
     component: () => import('@views/exception/403/index.vue'),
     meta: { title: '403', noLogin: true }
   },
-  {
-    path: '/:pathMatch(.*)*',
-    name: 'Exception404',
-    component: () => import('@views/exception/404/index.vue'),
-    meta: { title: '404' }
-  },
+
   {
     path: '/500',
     name: 'Exception500',
@@ -58,6 +59,24 @@ export const staticRoutes: AppRouteRecordRaw[] = [
     name: 'FormView',
     component: () => import('@/views/form-design/viewer/index.vue'),
     meta: { title: 'Form View', noLogin: true, isHideTab: true }
+  },
+  {
+    path: '/form/edit/:id',
+    name: 'FormEditStatic',
+    component: () => import('@/views/form-design/edit/index.vue'),
+    meta: { title: '编辑表单', isHideTab: true }
+  },
+  {
+    path: '/form/data/:id',
+    name: 'FormDataStatic',
+    component: () => import('@/views/form-design/data/index.vue'),
+    meta: { title: '表单数据', isHideTab: true }
+  },
+  {
+    path: '/form/stats/:id',
+    name: 'FormStatsStatic',
+    component: () => import('@/views/form-design/stats/index.vue'),
+    meta: { title: '图表统计', isHideTab: true }
   },
   {
     path: '/outside',
@@ -72,5 +91,11 @@ export const staticRoutes: AppRouteRecordRaw[] = [
         meta: { title: 'iframe' }
       }
     ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'Exception404',
+    component: () => import('@views/exception/404/index.vue'),
+    meta: { title: '404' }
   }
 ]

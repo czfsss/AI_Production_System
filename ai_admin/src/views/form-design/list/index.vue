@@ -35,13 +35,29 @@
         </el-table-column>
         <el-table-column label="操作">
           <template #default="scope">
-            <el-button size="small" type="success" @click="handlePreview(scope.row)"
-              >预览</el-button
-            >
-            <el-button size="small" @click="handleShare(scope.row.id)">查看 (公开链接)</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row.id)"
-              >删除</el-button
-            >
+            <div class="action-buttons">
+              <el-button size="small" type="success" @click="handlePreview(scope.row)"
+                >预览</el-button
+              >
+              <el-button v-if="!isVeryNarrow" size="small" @click="handleShare(scope.row)"
+                >分享</el-button
+              >
+              <el-button
+                size="small"
+                type="primary"
+                @click="$router.push(`/form/data/${scope.row.id}`)"
+                >数据</el-button
+              >
+              <el-button
+                v-if="!isVeryNarrow"
+                size="small"
+                type="warning"
+                @click="$router.push(`/form/stats/${scope.row.id}`)"
+                >统计</el-button
+              >
+
+              <ArtButtonMore :list="buildMoreList(scope.row)" @click="onMoreClick" />
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -94,15 +110,53 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref, onMounted, reactive } from 'vue'
+  import { ref, onMounted, reactive, computed } from 'vue'
+  import { useWindowSize } from '@vueuse/core'
   import { useRouter } from 'vue-router'
   import { ElMessage, ElMessageBox } from 'element-plus'
-  import { Search } from '@element-plus/icons-vue'
+  import { Search, DataLine, MoreFilled } from '@element-plus/icons-vue'
   import { getFormList, deleteForm } from '@/api/form'
   import QrcodeVue from 'qrcode.vue'
   import { useClipboard } from '@vueuse/core'
+  import ArtButtonMore, {
+    type ButtonMoreItem
+  } from '@/components/core/forms/art-button-more/index.vue'
 
   const router = useRouter()
+  const { width } = useWindowSize()
+  const isVeryNarrow = computed(() => width.value < 768)
+
+  function buildMoreList(row: any) {
+    const list: ButtonMoreItem[] = []
+    // 屏幕很窄时，把分享、统计也收纳进更多
+    if (isVeryNarrow.value) {
+      list.push({ key: 'share', label: '分享' })
+      list.push({ key: 'stats', label: '统计' })
+    }
+    // 永远包含编辑/删除
+    list.push({ key: 'edit', label: '编辑' })
+    list.push({ key: 'delete', label: '删除', color: '#f56c6c' })
+    // 绑定行数据
+    return list.map((i) => ({ ...i, row }))
+  }
+
+  function onMoreClick(item: any) {
+    const row = item.row
+    switch (item.key) {
+      case 'share':
+        handleShare(row)
+        break
+      case 'stats':
+        router.push(`/form/stats/${row.id}`)
+        break
+      case 'edit':
+        router.push(`/form/edit/${row.id}`)
+        break
+      case 'delete':
+        handleDelete(row.id)
+        break
+    }
+  }
   const forms = ref([])
   const loading = ref(false)
   const total = ref(0)
@@ -127,15 +181,15 @@
   const qrcodeWrapperRef = ref<HTMLElement | null>(null)
   const { copy, isSupported } = useClipboard()
 
-  function handleShare(id: number) {
-    if (!id) {
-      ElMessage.warning('无法获取表单ID')
+  function handleShare(row: any) {
+    if (!row.uuid) {
+      ElMessage.warning('无法获取表单标识')
       return
     }
 
     // 构建完整 URL
     const baseUrl = window.location.href.split('#')[0]
-    shareUrl.value = `${baseUrl}#/form/view/${id}`
+    shareUrl.value = `${baseUrl}#/submit-form/${row.uuid}`
     shareVisible.value = true
   }
 
@@ -228,6 +282,22 @@
 <style scoped>
   .form-list-container {
     padding: 20px;
+  }
+  .action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  @media (max-width: 1280px) {
+    .action-buttons {
+      justify-content: flex-start;
+    }
+  }
+  @media (max-width: 768px) {
+    .action-buttons {
+      justify-content: flex-start;
+    }
   }
   .flex {
     display: flex;

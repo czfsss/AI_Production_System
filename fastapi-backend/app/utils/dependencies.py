@@ -12,6 +12,8 @@ from utils.auth_utils import auth_utils
 
 # OAuth2PasswordBearer - FastAPI标准OAuth2方案
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/oauth2/token")
+# 可选令牌方案：未携带令牌时不抛错
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/oauth2/token", auto_error=False)
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
@@ -123,3 +125,18 @@ def require_permissions(*auth_marks):
         return current_user
 
     return perm_checker
+
+
+async def get_current_user_optional(token: str = Depends(oauth2_scheme_optional)) -> Optional[User]:
+    """可选的当前用户依赖：未登录返回 None"""
+    if not token:
+        return None
+    try:
+        payload = auth_utils.verify_token(token)
+        username = payload.get("sub")
+        if not username:
+            return None
+        user = await User.get_or_none(username=username)
+        return user
+    except Exception:
+        return None

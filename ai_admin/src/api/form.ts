@@ -2,6 +2,7 @@ import request from '@/utils/http'
 
 export interface Form {
   id: number
+  uuid: string
   name: string
   description?: string
   schema: any
@@ -41,9 +42,35 @@ export function getForm(id: number) {
   })
 }
 
-export function getPublicForm(id: number) {
+export function getPublicForm(uuid: string) {
   return request.get({
-    url: `/form/public/${id}`
+    url: `/form/public/${uuid}`
+  })
+}
+
+export function submitForm(uuid: string, data: any) {
+  return request.post({
+    url: `/form/submit/${uuid}`,
+    data: { data }
+  })
+}
+
+export function saveFormDraft(uuid: string, data: any) {
+  return request.post({
+    url: `/form/draft/${uuid}`,
+    data: { data, is_draft: true }
+  })
+}
+
+export function getFormDraft(uuid: string) {
+  return request.get({
+    url: `/form/draft/${uuid}`
+  })
+}
+
+export function getFormSubmissions(id: number) {
+  return request.get({
+    url: `/form/${id}/submissions`
   })
 }
 
