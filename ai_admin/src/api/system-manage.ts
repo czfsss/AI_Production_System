@@ -1,7 +1,5 @@
 import request from '@/utils/http'
 import { AppRouteRecord } from '@/types/router'
-import { asyncRoutes } from '@/router/routes/asyncRoutes'
-import { menuDataToRouter } from '@/router/utils/menuToRouter'
 
 // 获取用户列表
 export function fetchGetUserList(params: Api.SystemManage.UserSearchParams) {
@@ -69,25 +67,10 @@ interface MenuResponse {
 }
 
 // 获取菜单数据（优先请求后端，失败则回退到本地模拟）
-export async function fetchGetMenuList(delay = 0): Promise<MenuResponse> {
-  try {
-    const resp = await request.get<any>({ url: '/menu/list' })
-    const list =
-      resp?.menuList ?? resp?.menus ?? resp?.data?.menuList ?? resp?.data?.menus ?? []
-    if (Array.isArray(list)) {
-      return { menuList: list }
-    }
-  } catch {
-    // 忽略错误，进入本地回退
-  }
-
-  // 2) 本地模拟（保持开发可用）
-  const menuData = asyncRoutes
-  const menuList = menuData.map((route) => menuDataToRouter(route))
-  if (delay > 0) {
-    await new Promise((resolve) => setTimeout(resolve, delay))
-  }
-  return { menuList }
+export async function fetchGetMenuList(): Promise<MenuResponse> {
+  const resp = await request.get<any>({ url: '/menu/list' })
+  const list = resp?.menuList ?? resp?.menus ?? resp?.data?.menuList ?? resp?.data?.menus ?? []
+  return { menuList: Array.isArray(list) ? list : [] }
 }
 // 部门管理
 export function fetchGetDepartmentList() {

@@ -1,7 +1,7 @@
 <template>
   <div class="form-edit-container">
-    <!-- 表单设计器：加载已保存的 schema 作为默认模板 -->
-    <EDesigner @save="handleSave" :defaultSchema="formSchema as any" />
+    <!-- 表单设计器：仅在 schema 加载后再渲染，避免首次空白 -->
+    <EDesigner v-if="formSchema" @save="handleSave" :defaultSchema="formSchema as any" />
 
     <!-- 编辑名称/描述弹窗 -->
     <el-dialog v-model="dialogVisible" title="保存表单" width="500px">
@@ -104,4 +104,3 @@
     background-color: var(--el-bg-color);
   }
 </style>
-

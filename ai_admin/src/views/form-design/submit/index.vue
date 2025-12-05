@@ -223,31 +223,40 @@
         ElMessage.warning('请检查表单必填项')
       }
 
-      // 2. 兜底：直接从 UI 表单实例中读取 model（Element Plus 适配）
-      if (!data || Object.keys(data).length === 0) {
-        console.log('validate 为空，尝试通过 getFormInstance 读取 model...')
-        try {
-          const formInstance: any = await kfb.value?.getFormInstance?.()
-          const instances = Array.isArray(formInstance) ? formInstance : [formInstance]
-          for (const inst of instances) {
-            if (!inst) continue
-            // 触发表单原生校验，确保必填项检查
-            if (typeof inst.validate === 'function') {
-              try {
-                await inst.validate()
-              } catch (err) {
-                console.warn('ElForm.validate 校验失败:', err)
-              }
-            }
-            // 读取 Element Plus 表单的 model
-            if (inst.model && typeof inst.model === 'object') {
-              Object.assign(data, inst.model)
+      // 2. 合并 UI 表单模型与 pageManager.forms，补齐布局内字段
+      try {
+        const formInstance: any = await kfb.value?.getFormInstance?.()
+        const instances = Array.isArray(formInstance) ? formInstance : [formInstance]
+        const merged: Record<string, any> = {}
+        for (const inst of instances) {
+          if (!inst) continue
+          if (typeof inst.validate === 'function') {
+            try {
+              await inst.validate()
+            } catch (err) {
+              console.warn('ElForm.validate 校验失败:', err)
             }
           }
-          console.log('getFormInstance() merged model:', data)
-        } catch (e) {
-          console.warn('getFormInstance() 读取失败:', e)
+          if (inst.model && typeof inst.model === 'object') {
+            Object.assign(merged, inst.model)
+          }
         }
+        try {
+          const formsMap = kfb.value?.pageManager?.forms || {}
+          if (formsMap && typeof formsMap === 'object') {
+            for (const key in formsMap) {
+              const m = formsMap[key]
+              if (m && typeof m === 'object') Object.assign(merged, m)
+            }
+          }
+        } catch (e2) {
+          console.warn('pageManager.forms 读取失败:', e2)
+        }
+
+        data = Object.assign({}, merged, data)
+        console.log('Merged final data:', data)
+      } catch (e) {
+        console.warn('getFormInstance() 读取失败:', e)
       }
 
       console.log('Final Form Data to submit:', data)

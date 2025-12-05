@@ -64,7 +64,8 @@ export function saveFormDraft(uuid: string, data: any) {
 
 export function getFormDraft(uuid: string) {
   return request.get({
-    url: `/form/draft/${uuid}`
+    url: `/form/draft/${uuid}`,
+    showErrorMessage: false
   })
 }
 
@@ -75,7 +76,7 @@ export function getFormSubmissions(id: number) {
 }
 
 export function deleteForm(id: number) {
-  return request.del({
+  return request.delete({
     url: `/form/${id}`
   })
 }

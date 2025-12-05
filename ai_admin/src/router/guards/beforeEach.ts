@@ -11,14 +11,11 @@ import { registerDynamicRoutes } from '../utils/registerRoutes'
 import { AppRouteRecord } from '@/types/router'
 import { RoutesAlias } from '../routesAlias'
 import { menuDataToRouter } from '../utils/menuToRouter'
-import { asyncRoutes } from '../routes/asyncRoutes'
 import { loadingService } from '@/utils/ui'
 import { useCommon } from '@/composables/useCommon'
 import { useWorktabStore } from '@/store/modules/worktab'
 import { fetchGetUserInfo } from '@/api/auth'
 
-// 前端权限模式 loading 关闭延时，提升用户体验
-const LOADING_DELAY = 50
 
 // 是否已注册动态路由
 const isRouteRegistered = ref(false)
@@ -190,11 +187,7 @@ async function handleDynamicRoutes(
  */
 async function getMenuData(router: Router): Promise<void> {
   try {
-    if (useCommon().isFrontendMode.value) {
-      await processFrontendMenu(router)
-    } else {
-      await processBackendMenu(router)
-    }
+    await processBackendMenu(router)
   } catch (error) {
     handleMenuError(error)
     throw error
@@ -204,23 +197,7 @@ async function getMenuData(router: Router): Promise<void> {
 /**
  * 处理前端控制模式的菜单逻辑
  */
-async function processFrontendMenu(router: Router): Promise<void> {
-  const menuList = asyncRoutes.map((route) => menuDataToRouter(route))
-  const userStore = useUserStore()
-  const roles = userStore.info.roles
-  const department = userStore.info.department
-
-  if (!roles) {
-    throw new Error('获取用户角色失败')
-  }
-
-  const filteredMenuList = filterMenuByRoles(menuList, roles, department)
-
-  // 添加延时以提升用户体验
-  await new Promise((resolve) => setTimeout(resolve, LOADING_DELAY))
-
-  await registerAndStoreMenu(router, filteredMenuList)
-}
+// 已移除前端模式处理，统一由后端返回菜单
 
 /**
  * 处理后端控制模式的菜单逻辑
@@ -292,33 +269,7 @@ function handleMenuError(error: unknown): void {
   throw error instanceof Error ? error : new Error('获取菜单列表失败，请重新登录')
 }
 
-/**
- * 根据角色过滤菜单
- */
-const filterMenuByRoles = (
-  menu: AppRouteRecord[],
-  roles: string[],
-  department?: string
-): AppRouteRecord[] => {
-  return menu.reduce((acc: AppRouteRecord[], item) => {
-    const itemRoles = item.meta?.roles
-    const itemDepts = (item.meta as any)?.departments as string[] | undefined
-    const isSuper = roles?.includes('R_SUPER')
-    const roleOk = isSuper || !itemRoles || itemRoles.some((role) => roles?.includes(role))
-    const deptOk = isSuper || !itemDepts || (department ? itemDepts.includes(department) : false)
-    const hasPermission = roleOk && deptOk
-
-    if (hasPermission) {
-      const filteredItem = { ...item }
-      if (filteredItem.children?.length) {
-        filteredItem.children = filterMenuByRoles(filteredItem.children, roles, department)
-      }
-      acc.push(filteredItem)
-    }
-
-    return acc
-  }, [])
-}
+// 已移除前端角色过滤，菜单由后端过滤
 
 /**
  * 验证菜单列表是否有效

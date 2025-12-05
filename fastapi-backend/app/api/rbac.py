@@ -117,55 +117,74 @@ async def delete_role(roleId: int = Body(..., embed=True), current_user: User = 
 @rbac_router.get("/role/permissions", summary="获取角色权限")
 async def get_role_permissions(roleId: int):
     """
-    获取指定角色的菜单权限ID列表。
+    获取指定角色的菜单及按钮权限。
+    返回：
+    - menuPermissions: [{menuId, permissions: [authMark, ...]}]
+    - menuIds: 兼容字段，仅包含菜单ID列表
     """
     role = await Role.get_or_none(id=roleId)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
-    
-    # Get all Menu IDs assigned to this role
-    rms = await RoleMenu.filter(role=role).values_list("menu_id", flat=True)
-    
-    # Return list of menu IDs (frontend tree needs selected keys)
-    return {"menuIds": list(rms)}
+
+    rms = await RoleMenu.filter(role=role).values("menu_id", "permission")
+    menu_permissions = []
+    menu_ids = []
+    for rm in rms:
+        mid = rm.get("menu_id")
+        menu_ids.append(mid)
+        perms = rm.get("permission") or []
+        if isinstance(perms, (list, tuple)):
+            menu_permissions.append({"menuId": mid, "permissions": list(perms)})
+        elif perms:
+            menu_permissions.append({"menuId": mid, "permissions": [str(perms)]})
+
+    return {"menuPermissions": menu_permissions, "menuIds": menu_ids}
 
 @rbac_router.post("/role/permissions/save", summary="保存角色权限")
 async def save_role_permissions(data: dict = Body(...), current_user: User = Depends(require_permissions("edit"))):
     """
-    保存角色的菜单权限分配。
-    
+    保存角色的菜单及按钮权限分配。
+
     参数:
     - roleId: 角色ID
-    - menuIds: 菜单ID列表 (包含菜单和按钮)
-    
+    - menuPermissions: [{menuId, permissions: [authMark, ...]}]
+    - 兼容: 如仅传 menuIds，则为该菜单赋予其定义的全部按钮权限
+
     行为：
     - 清空角色原有菜单权限
-    - 为传入的 `menuIds` 创建记录
-    
-    安全：
-    - 如目标角色为 `R_SUPER`，仅超级管理员可修改其权限。
+    - 逐条写入新的 role_menu 记录（含 permission）
     """
     role_id = data.get("roleId")
-    menu_ids = data.get("menuIds", [])
-    
     role = await Role.get_or_none(id=role_id)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
-    
-    # Check super admin permission
+
+    # 超级管理员权限保护
     if role.code == "R_SUPER":
         if not await UserRole.filter(user=current_user, role__code="R_SUPER").exists():
             raise HTTPException(status_code=403, detail="只有超级管理员可以修改超级管理员权限")
-    
-    # Clear existing permissions (RoleMenu)
+
+    # 清空旧权限
     await RoleMenu.filter(role=role).delete()
-    
-    # Add new permissions
-    for mid in menu_ids:
-        menu = await Menu.get_or_none(id=mid)
-        if menu:
-            await RoleMenu.create(role=role, menu=menu)
-            
+
+    menu_permissions = data.get("menuPermissions")
+    if isinstance(menu_permissions, list):
+        for mp in menu_permissions:
+            mid = mp.get("menuId")
+            marks = mp.get("permissions") or []
+            menu = await Menu.get_or_none(id=mid)
+            if menu:
+                await RoleMenu.create(role=role, menu=menu, permission=list(marks))
+    else:
+        # 兼容旧入参：menuIds
+        menu_ids = data.get("menuIds", [])
+        for mid in menu_ids:
+            menu = await Menu.get_or_none(id=mid)
+            if menu:
+                # 若无指定权限，则授予该菜单定义的全部按钮权限
+                perms = menu.permission if isinstance(menu.permission, list) else ([str(menu.permission)] if menu.permission else [])
+                await RoleMenu.create(role=role, menu=menu, permission=perms)
+
     return {"message": "权限保存成功"}
 
 # --- 用户管理 ---

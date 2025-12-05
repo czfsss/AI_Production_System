@@ -66,7 +66,7 @@
 
       ElMessage.success('表单保存成功！')
       dialogVisible.value = false
-      router.push('/form/list')
+      router.replace({ name: 'FormList' })
     } catch (error) {
       console.error(error)
     } finally {

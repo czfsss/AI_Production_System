@@ -85,7 +85,7 @@
       // 如果有 authList，将其转换为子节点
       if (node.meta && node.meta.authList && node.meta.authList.length) {
         const authNodes = node.meta.authList.map((auth: any) => ({
-          id: auth.id, // 使用按钮的真实ID
+          id: `menu_${node.id}__perm_${auth.authMark}`,
           label: auth.title,
           authMark: auth.authMark,
           isAuth: true,
@@ -126,13 +126,22 @@
 
           // 2. 获取角色已有权限
           const res = await fetchRolePermissions({ roleId: props.roleData.roleId })
-          // @ts-ignore
-          if (res && res.menuIds) {
-            nextTick(() => {
-              // @ts-ignore
-              treeRef.value?.setCheckedKeys(res.menuIds)
+          const keys: Array<string | number> = []
+          if (res && Array.isArray(res.menuPermissions)) {
+            res.menuPermissions.forEach((mp: any) => {
+              keys.push(mp.menuId)
+              if (Array.isArray(mp.permissions)) {
+                mp.permissions.forEach((mark: string) => {
+                  keys.push(`menu_${mp.menuId}__perm_${mark}`)
+                })
+              }
             })
+          } else if (res && Array.isArray(res.menuIds)) {
+            keys.push(...res.menuIds)
           }
+          nextTick(() => {
+            treeRef.value?.setCheckedKeys(keys)
+          })
         } catch (error) {
           console.error('获取权限失败:', error)
         }
@@ -156,15 +165,35 @@
     const tree = treeRef.value
     if (!tree) return
 
-    const checkedKeys = tree.getCheckedKeys()
-    const halfCheckedKeys = tree.getHalfCheckedKeys()
-    const allKeys = [...checkedKeys, ...halfCheckedKeys]
+    const checkedKeys: Array<string | number> = tree.getCheckedKeys()
+    const halfCheckedKeys: Array<string | number> = tree.getHalfCheckedKeys()
+    const allKeys: Array<string | number> = [...checkedKeys, ...halfCheckedKeys]
+
+    const menuPermissionsMap: Record<number, Set<string>> = {}
+    allKeys.forEach((key) => {
+      if (typeof key === 'number') {
+        if (!menuPermissionsMap[key]) menuPermissionsMap[key] = new Set()
+      } else if (typeof key === 'string') {
+        const match = key.match(/^menu_(\d+)__perm_(.+)$/)
+        if (match) {
+          const menuId = Number(match[1])
+          const mark = match[2]
+          if (!menuPermissionsMap[menuId]) menuPermissionsMap[menuId] = new Set()
+          menuPermissionsMap[menuId].add(mark)
+        }
+      }
+    })
+
+    const payload = {
+      roleId: props.roleData.roleId,
+      menuPermissions: Object.keys(menuPermissionsMap).map((mid) => ({
+        menuId: Number(mid),
+        permissions: Array.from(menuPermissionsMap[Number(mid)])
+      }))
+    }
 
     try {
-      await fetchSaveRolePermissions({
-        roleId: props.roleData.roleId,
-        menuIds: allKeys // 传递 menuIds
-      })
+      await fetchSaveRolePermissions(payload)
       ElMessage.success('权限保存成功')
       emit('success')
       handleClose()
@@ -202,8 +231,8 @@
     isSelectAll.value = !isSelectAll.value
   }
 
-  const getAllNodeKeys = (nodes: any[]): number[] => {
-    const keys: number[] = []
+  const getAllNodeKeys = (nodes: any[]): Array<string | number> => {
+    const keys: Array<string | number> = []
     const traverse = (nodeList: any[]) => {
       nodeList.forEach((node) => {
         if (node.id) {

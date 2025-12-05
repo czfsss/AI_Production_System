@@ -10,7 +10,7 @@ menu_router = APIRouter()
 
 # --- Helper ---
 
-def serialize_menu(menu: Menu, all_menus: List[Menu]):
+def serialize_menu(menu: Menu, all_menus: List[Menu], allowed_marks_map: dict[int, List[str]]):
     children = [m for m in all_menus if m.parent_id == menu.id]
     children.sort(key=lambda x: x.sort)
     
@@ -19,8 +19,9 @@ def serialize_menu(menu: Menu, all_menus: List[Menu]):
     for child in children:
         # Only process 'catalogue' and 'menu' types for recursive structure
         if child.type in ['catalogue', 'menu']:
-            menu_children.append(serialize_menu(child, all_menus))
+            menu_children.append(serialize_menu(child, all_menus, allowed_marks_map))
             
+    allowed_marks = allowed_marks_map.get(menu.id) or []
     res = {
         "id": menu.id,
         "path": menu.path,
@@ -34,8 +35,8 @@ def serialize_menu(menu: Menu, all_menus: List[Menu]):
             "isHideTab": menu.hide_tab,
             "isIframe": menu.iframe,
             "sort": menu.sort,
-            # Convert JSON list to frontend authList format if permission exists
-            "authList": [{"title": p, "authMark": p} for p in (menu.permission or [])] if menu.permission else []
+            # 仅返回当前用户允许的按钮权限
+            "authList": [{"title": p, "authMark": p} for p in allowed_marks]
         },
         "menuType": menu.type  # Add type to response
     }
@@ -63,13 +64,17 @@ async def get_menu_list(current_user: User = Depends(get_current_active_user)):
     logging.info(f"Role codes: {role_codes}, Role IDs: {role_ids}")
     
     visible_menus = []
+    allowed_marks_map: dict[int, List[str]] = {}
     
     # 超级管理员或admin账号拥有所有权限
     if "R_SUPER" in role_codes or current_user.username == "admin":
         visible_menus = all_menus
+        # 超管拥有所有菜单的所有按钮权限
+        for m in all_menus:
+            allowed_marks_map[m.id] = list(m.permission or [])
     else:
         # 1. 获取角色关联的菜单ID
-        role_menu_ids = await RoleMenu.filter(role_id__in=role_ids).values_list("menu_id", flat=True)
+        role_menu_records = await RoleMenu.filter(role_id__in=role_ids).values("menu_id", "permission")
         
         # 2. 获取部门关联的菜单ID
         dep_menu_ids = []
@@ -81,10 +86,31 @@ async def get_menu_list(current_user: User = Depends(get_current_active_user)):
                 dep_menu_ids = await DepartmentMenu.filter(department=dep).values_list("menu_id", flat=True)
         
         # 3. 取并集
+        role_menu_ids = [rm.get("menu_id") for rm in role_menu_records]
         visible_ids = set(role_menu_ids) | set(dep_menu_ids)
         
         # 4. 过滤菜单
         visible_menus = [m for m in all_menus if m.id in visible_ids]
+
+        # 计算允许的按钮权限：角色权限(优先取role_menu.permission，否则回退menu.permission) ∪ 部门的menu.permission
+        menu_map = {m.id: m for m in all_menus}
+        for rm in role_menu_records:
+            mid = rm.get("menu_id")
+            perms = rm.get("permission")
+            base = []
+            if perms:
+                base = list(perms) if isinstance(perms, (list, tuple)) else [str(perms)]
+            else:
+                menu = menu_map.get(mid)
+                if menu and menu.permission:
+                    base = list(menu.permission) if isinstance(menu.permission, (list, tuple)) else [str(menu.permission)]
+            allowed_marks_map[mid] = list(set(allowed_marks_map.get(mid, []) + base))
+
+        for mid in dep_menu_ids:
+            menu = menu_map.get(mid)
+            if menu and menu.permission:
+                base = list(menu.permission) if isinstance(menu.permission, (list, tuple)) else [str(menu.permission)]
+                allowed_marks_map[mid] = list(set(allowed_marks_map.get(mid, []) + base))
 
     # 构建树形结构
     top_nodes = [m for m in visible_menus if m.parent_id is None]
@@ -94,7 +120,7 @@ async def get_menu_list(current_user: User = Depends(get_current_active_user)):
     for node in top_nodes:
         # Process top-level nodes
         if node.type in ['catalogue', 'menu']:
-            result.append(serialize_menu(node, visible_menus))
+            result.append(serialize_menu(node, visible_menus, allowed_marks_map))
             
     return {"menuList": result}
 

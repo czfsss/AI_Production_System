@@ -84,17 +84,24 @@ def require_permissions(*auth_marks):
         if "R_SUPER" in role_codes:
             return current_user
 
-        # 根据角色ID查询对应的菜单ID
-        role_menu_ids = await RoleMenu.filter(role_id__in=role_ids).values_list("menu_id", flat=True)
-        # 查询菜单对应的权限标识
-        role_menus = await Menu.filter(id__in=list(role_menu_ids)).exclude(permission__isnull=True)
+        # 读取角色-菜单关联的按钮权限
         role_marks = []
-        for m in role_menus:
-            if m.permission:
-                if isinstance(m.permission, list):
-                    role_marks.extend(m.permission)
+        role_menu_records = await RoleMenu.filter(role_id__in=role_ids).values("menu_id", "permission")
+        # 若记录未设置permission，则回退到Menu.permission
+        for rm in role_menu_records:
+            perms = rm.get("permission")
+            if perms:
+                if isinstance(perms, list):
+                    role_marks.extend(perms)
                 else:
-                    role_marks.append(str(m.permission))
+                    role_marks.append(str(perms))
+            else:
+                menu = await Menu.get_or_none(id=rm.get("menu_id"))
+                if menu and menu.permission:
+                    if isinstance(menu.permission, list):
+                        role_marks.extend(menu.permission)
+                    else:
+                        role_marks.append(str(menu.permission))
 
         # 初始化部门权限标识列表
         dep_marks = []
@@ -104,7 +111,7 @@ def require_permissions(*auth_marks):
             if dep:
                 # 获取部门关联的菜单ID
                 dep_menu_ids = await DepartmentMenu.filter(department=dep).values_list("menu_id", flat=True)
-                # 查询菜单对应的权限标识
+                # 部门权限仍按菜单定义的权限标识
                 dep_menus = await Menu.filter(id__in=list(dep_menu_ids)).exclude(permission__isnull=True)
                 for m in dep_menus:
                     if m.permission:

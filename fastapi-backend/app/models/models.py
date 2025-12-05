@@ -100,6 +100,7 @@ class RoleMenu(Model):
     id = fields.IntField(pk=True, auto=True, description="自增ID")
     role = fields.ForeignKeyField("models.Role", related_name="role_menus", description="角色")
     menu = fields.ForeignKeyField("models.Menu", related_name="menu_roles", description="菜单")
+    permission = fields.JSONField(null=True, description="角色在该菜单的按钮权限列表")
 
     class Meta:
         table = "role_menu"
